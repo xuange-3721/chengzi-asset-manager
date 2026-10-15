@@ -544,7 +544,7 @@ const App = {
     $('#sAdd').addEventListener('click',()=>Shop.edit(null));
     const a2=$('#sAdd2'); if(a2) a2.addEventListener('click',()=>Shop.edit(null));
     m.querySelectorAll('[data-ed]').forEach(b=>b.addEventListener('click',()=>Shop.edit(b.dataset.id)));
-    m.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>Shop.del(b.dataset.id)));
+    m.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>Shop.del(b.dataset.del)));
   }
 };
 
@@ -553,7 +553,7 @@ const Modal = {
   open(html){ $('#modal').innerHTML=html; $('#mask').classList.add('show'); },
   close(){ $('#mask').classList.remove('show'); $('#modal').innerHTML=''; $('#modal').classList.remove('wide'); }
 };
-$('#mask').addEventListener('click',e=>{ if(e.target.id==='mask') Modal.close(); });
+/* 弹窗只能通过「取消」按钮关闭 —— 点外部区域关闭容易在编辑到一半时误触丢内容 */
 
 /* =====================================================================
  *  单词
@@ -583,7 +583,13 @@ const Words = {
     const pv=$('#fPv');
     const paint=()=>{ pv.innerHTML = pendingImg? imgHtml(pendingImg) : '<span>＋</span>'; };
     paint();
-    const pickFile=f=>{ if(!f) return; compressImage(f, du=>{ pendingImg=du; $('#fEmoji').value=''; paint(); }); };
+    const pickFile=f=>{
+      if(!f) return;
+      compressImage(f, du=>{ pendingImg=du; $('#fEmoji').value=''; paint(); });
+      // 文件名自动推导单词（与批量导入同一个 parseWord）；用户已手填则不覆盖
+      const guess = parseWord(f.name);
+      if(guess && !$('#fWord').value.trim()) $('#fWord').value = guess;
+    };
     $('#fPick').addEventListener('click',()=>$('#fFile').click());
     $('#fFile').addEventListener('change',e=>pickFile(e.target.files[0]));
     pv.addEventListener('dragover',e=>{ e.preventDefault(); pv.classList.add('drag'); });
