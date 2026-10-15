@@ -156,6 +156,15 @@ img{max-width:100%}
 .bi-act{font-size:.75rem;padding:5px 10px;border-radius:9px;background:#F0F5FA;font-weight:700}
 .bi-act.on{background:var(--c-primary);color:#fff}
 .bi-note{font-size:.72rem;color:#D68910}
+
+/* 灯箱：点任意缩略图看大图（确认图片内容/是否最新） */
+#lightbox{position:fixed;inset:0;background:rgba(10,25,40,.85);z-index:500;display:none;
+  align-items:center;justify-content:center;flex-direction:column;gap:14px;cursor:zoom-out}
+#lightbox.show{display:flex}
+#lightbox img{max-width:86vw;max-height:76vh;border-radius:16px;background:#fff;padding:10px;
+  box-shadow:0 20px 60px rgba(0,0,0,.45);image-rendering:auto}
+#lightbox .cap{color:#cfe0f0;font-size:.8rem;font-family:Consolas,monospace;word-break:break-all;
+  max-width:86vw;text-align:center}
 </style>
 </head>
 <body>
@@ -190,6 +199,7 @@ img{max-width:100%}
 </div>
 
 <div id="mask"><div id="modal"></div></div>
+<div id="lightbox"><img id="lbImg" alt=""><div class="cap" id="lbCap"></div></div>
 <div id="prog"><div class="box"><h3 id="progTitle">处理中…</h3><div class="bar"><i id="progBar"></i></div><div class="msg" id="progMsg"></div></div></div>
 <div id="toast"></div>
 
@@ -429,12 +439,22 @@ const GH = {
 };
 
 /* ---------- 渲染 img 的统一入口：dataURL / emoji / 云端路径 三态 ---------- */
+/* 云端路径图片的"浏览器可显示"地址：
+   <img src> 无法携带 GitHub token，api.github.com 直接 401 —— 之前卡片破图的根因。
+   公开仓库改走 jsDelivr CDN；内容寻址（文件名=内容hash）→ 内容不变 URL 不变，缓存永远正确。
+   jsDelivr 失败（网络原因）再回退 raw.githubusercontent，仍失败显示占位。 */
+function cloudImgUrl(rel){
+  return 'https://cdn.jsdelivr.net/gh/'+ASSET_REPO+'@'+ASSET_BRANCH+'/assets/'+String(rel).replace(/^images\//,'images/');
+}
+function cloudImgUrlFallback(rel){
+  return 'https://raw.githubusercontent.com/'+ASSET_REPO+'/'+ASSET_BRANCH+'/assets/'+String(rel).replace(/^images\//,'images/');
+}
 function imgHtml(v, cls){
   if(!v) return '<span>❓</span>';
   if(String(v).indexOf('data:')===0) return '<img src="'+v+'">';
   if(String(v).indexOf('images/')===0){
-    const u = GH.rawUrl(ASSET_DIR+'/'+v.replace(/^images\//,''));
-    return '<img src="'+esc(u)+'" onerror="this.parentNode.textContent=\'🖼️\'">';
+    return '<img src="'+esc(cloudImgUrl(v))+'" data-fb="'+esc(cloudImgUrlFallback(v))+'" '
+      +'onerror="if(this.dataset.fb){this.src=this.dataset.fb;this.dataset.fb=\'\';}else{this.outerHTML=\'<span title=\\\'图片加载失败\\\'>🖼️</span>\';}">';
   }
   return esc(v); // emoji
 }
@@ -1222,6 +1242,24 @@ const More = {
     finally{ $('#prog').classList.remove('show'); }
   }
 };
+
+/* ---------- 灯箱：事件委托到 document，覆盖卡片/编辑弹窗/批量面板里的所有预览图 ---------- */
+document.addEventListener('click',e=>{
+  const im = e.target;
+  if(!(im instanceof HTMLImageElement) || !im.src) return;
+  if(!im.closest('.thumb, .bi-thumb, .bi-side, .imgpick .pv')) return;
+  const lb = document.getElementById('lightbox');
+  document.getElementById('lbImg').src = im.src;
+  let cap = '';
+  if(im.src.indexOf('data:')===0){ cap = '本地图片（尚未发布到云端）'; }
+  else{ try{ const m = new URL(im.src).pathname.match(/[^\/]+$/); cap = m? decodeURIComponent(m[0]) : ''; }catch(err){} }
+  document.getElementById('lbCap').textContent = cap;
+  lb.classList.add('show');
+});
+document.getElementById('lightbox').addEventListener('click',()=>{
+  document.getElementById('lightbox').classList.remove('show');
+  document.getElementById('lbImg').src='';
+});
 
 /* ---------- 启动 ---------- */
 if(sessionStorage.getItem('cz_gate')==='1') App.boot();
