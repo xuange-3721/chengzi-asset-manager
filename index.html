@@ -479,7 +479,7 @@ const App = {
     if(!Store.data.levels.length) h += '<div class="empty">还没有关卡</div>';
     h += '<div class="grid">'+Store.data.levels.slice().sort((a,b)=>(a.order||0)-(b.order||0)).map(lv=>{
       const n = (lv.wordIds||[]).length;
-      return '<div class="card"><div class="thumb" style="font-size:1.6rem">'+esc(lv.icon||'📦')+'</div>'
+      return '<div class="card"><div class="thumb">'+imgHtml(lv.icon)+'</div>'
         +'<div class="info"><div class="t">'+esc(lv.name)+'</div><div class="s">'+n+' 个单词 · 顺序 '+(lv.order||0)+'</div></div>'
         +'<div class="ops"><button data-ed="'+esc(lv.id)+'">编辑</button><button class="d" data-del="'+esc(lv.id)+'">删</button></div></div>';
     }).join('');
@@ -587,14 +587,25 @@ const Levels = {
   edit(id){
     const lv = id? Store.data.levels.find(x=>x.id===id) : null;
     const sel = new Set(lv? (lv.wordIds||[]) : []);
-    const icon = lv? (lv.icon||'📦') : '📦';
+    let pendingIcon = lv? (lv.icon||'') : '';   // dataURL / emoji / ''（兜底 📦）
     const name = lv? lv.name : '';
     Modal.open(`
       <h3>${lv?'编辑关卡':'新增关卡'}</h3>
-      <div class="frow" style="display:flex;gap:10px">
-        <div style="width:92px"><label>图标(emoji)</label><input type="text" id="lIcon" value="${esc(icon)}" maxlength="4" style="text-align:center;font-size:1.3rem"></div>
-        <div style="flex:1"><label>关卡名称 *</label><input type="text" id="lName" value="${esc(name)}" placeholder="水果"></div>
+      <div class="frow"><label>图标（emoji 或 图片）</label>
+        <div class="imgpick">
+          <div class="pv" id="lPv"></div>
+          <div class="col">
+            <button id="lPick">📁 选择图片</button>
+            <button id="lClear">🚫 移除图片（改用 emoji）</button>
+            <input type="text" id="lIcon" maxlength="8" placeholder="或直接填 emoji，如 🍎"
+              value="${esc(lv && String(lv.icon||'').indexOf('data:')!==0 && String(lv.icon||'').indexOf('images/')!==0 ? lv.icon : '')}"
+              style="padding:8px 11px;border:2px solid #E3ECF5;border-radius:10px;outline:none;text-align:center;font-size:1.2rem">
+          </div>
+        </div>
+        <div class="hint">图片会压缩到最长边 200px，随「发布到云端」上传；手机端关卡列表会显示同款图标。</div>
+        <input type="file" id="lFile" accept="image/*" style="display:none">
       </div>
+      <div class="frow"><label>关卡名称 *</label><input type="text" id="lName" value="${esc(name)}" placeholder="水果"></div>
       <div class="frow"><label>归属单词（点击移动）</label>
         <div class="dual">
           <div class="col"><h4>未归属</h4><div class="list" id="lLeft"></div></div>
@@ -604,23 +615,33 @@ const Levels = {
       </div>
       <div class="brow"><button class="btn" id="lCancel">取消</button>
         <button class="btn btn-primary" id="lSave">保存</button></div>`);
-    const paint=()=>{
-      const kw='';
+    const pv=$('#lPv');
+    const paint=()=>{ pv.innerHTML = pendingIcon? imgHtml(pendingIcon) : '<span>📦</span>'; };
+    paint();
+    const pickFile=f=>{ if(!f) return; compressImage(f, du=>{ pendingIcon=du; $('#lIcon').value=''; paint(); }); };
+    $('#lPick').addEventListener('click',()=>$('#lFile').click());
+    $('#lFile').addEventListener('change',e=>pickFile(e.target.files[0]));
+    pv.addEventListener('dragover',e=>{ e.preventDefault(); pv.classList.add('drag'); });
+    pv.addEventListener('dragleave',()=>pv.classList.remove('drag'));
+    pv.addEventListener('drop',e=>{ e.preventDefault(); pv.classList.remove('drag'); pickFile(e.dataTransfer.files[0]); });
+    $('#lClear').addEventListener('click',()=>{ pendingIcon=''; $('#lIcon').value=''; paint(); });
+    $('#lIcon').addEventListener('input',e=>{ if(e.target.value){ pendingIcon=e.target.value.trim(); paint(); } });
+    const paintWords=()=>{
       const left = Store.data.words.filter(w=>!sel.has(w.id));
       const right = Store.data.words.filter(w=>sel.has(w.id));
       const row=(w,side)=>'<div class="it" data-id="'+esc(w.id)+'" data-side="'+side+'">'
         +'<div class="th">'+imgHtml(w.img)+'</div><span>'+esc(w.word)+'</span></div>';
       $('#lLeft').innerHTML  = left.length?  left.map(w=>row(w,'L')).join('')  : '<div class="it" style="color:#999">（空）</div>';
       $('#lRight').innerHTML = right.length? right.map(w=>row(w,'R')).join('') : '<div class="it" style="color:#999">（空）</div>';
-      $('#lLeft').querySelectorAll('.it').forEach(it=>it.addEventListener('click',()=>{ sel.add(it.dataset.id); paint(); }));
-      $('#lRight').querySelectorAll('.it').forEach(it=>it.addEventListener('click',()=>{ sel.delete(it.dataset.id); paint(); }));
+      $('#lLeft').querySelectorAll('.it').forEach(it=>it.addEventListener('click',()=>{ sel.add(it.dataset.id); paintWords(); }));
+      $('#lRight').querySelectorAll('.it').forEach(it=>it.addEventListener('click',()=>{ sel.delete(it.dataset.id); paintWords(); }));
     };
-    paint();
+    paintWords();
     $('#lCancel').addEventListener('click',Modal.close);
     $('#lSave').addEventListener('click',()=>{
       const n=$('#lName').value.trim();
       if(!n){ toast('关卡名称不能为空'); return; }
-      const ic=$('#lIcon').value.trim()||'📦';
+      const ic = pendingIcon || '📦';
       const ids=[...sel];
       if(lv){ lv.name=n; lv.icon=ic; lv.wordIds=ids; }
       else Store.data.levels.push({ id:uid('l'), name:n, icon:ic, wordIds:ids, order:Store.data.levels.length });
@@ -723,16 +744,20 @@ const Publish = {
     $('#progTitle').textContent='发布到云端'; $('#prog').classList.add('show'); this.prog(0,'准备…');
     const log=[];
     try{
-      // 1. 收集需要上传的图片：img 是 dataURL 的才需要传；
+      // 1. 收集需要上传的图片：单词/商品的 img、关卡的 icon，是 dataURL 的才需要传；
       //    已是云端路径的说明上次已传过（这就是"增量"），记一条日志让用户看得见
       const jobs=[];
       d.words.forEach(w=>{
-        if((w.img||'').startsWith('data:')) jobs.push({ref:w});
+        if((w.img||'').startsWith('data:')) jobs.push({ref:w, field:'img'});
         else if((w.img||'').startsWith('images/')) log.push('未变 '+w.word+'（云端已有）');
       });
       d.shop.items.forEach(it=>{
-        if((it.img||'').startsWith('data:')) jobs.push({ref:it});
+        if((it.img||'').startsWith('data:')) jobs.push({ref:it, field:'img'});
         else if((it.img||'').startsWith('images/')) log.push('未变 '+it.name+'（云端已有）');
+      });
+      d.levels.forEach(lv=>{
+        if((lv.icon||'').startsWith('data:')) jobs.push({ref:lv, field:'icon'});
+        else if((lv.icon||'').startsWith('images/')) log.push('未变 图标·'+lv.name+'（云端已有）');
       });
       const total=jobs.length+1;
       // 2. 一次性列出云端图片目录的 sha 映射（替代逐文件 GET：更快，也避开缓存 404）
@@ -742,7 +767,7 @@ const Publish = {
       const done=[];
       for(let i=0;i<jobs.length;i++){
         const j=jobs[i];
-        const du=j.ref.img;
+        const du=j.ref[j.field];
         const h=fnv(du);
         const name=j.ref.id+'.'+h+'.'+dataUrlExt(du);
         this.prog(i/total,'上传图片 '+(i+1)+'/'+jobs.length+' …');
@@ -753,9 +778,9 @@ const Publish = {
           shas[name]=shas[name]||'1';   // 内存登记，同批重复引用不再查
           log.push('上传图片 '+name);
         }
-        done.push({ref:j.ref, rel:'images/'+name});
+        done.push({ref:j.ref, field:j.field, rel:'images/'+name});
       }
-      done.forEach(x=>{ x.ref.img=x.rel; });
+      done.forEach(x=>{ x.ref[x.field]=x.rel; });
       Store.save();
       // 4. 写 manifest
       this.prog(jobs.length/total,'写入 manifest.json …');
@@ -1018,6 +1043,7 @@ const More = {
         const m=JSON.parse(man.content);
         (m.words||[]).forEach(w=>{ if((w.img||'').startsWith('images/')) used.add(w.img.split('/').pop()); });
         ((m.shop&&m.shop.items)||[]).forEach(it=>{ if((it.img||'').startsWith('images/')) used.add(it.img.split('/').pop()); });
+        (m.levels||[]).forEach(lv=>{ if((lv.icon||'').startsWith('images/')) used.add(lv.icon.split('/').pop()); });
       }
       const junk = files.filter(f=>f.type==='file' && !used.has(f.name));
       $('#prog').classList.remove('show');
