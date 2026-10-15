@@ -137,6 +137,25 @@ img{max-width:100%}
 .diff-list .tag.upd{background:#FFF4E0;color:#D68910}
 .diff-list .tag.same{background:#F0F5FA;color:var(--c-muted)}
 @media (max-width:620px){ .grid{grid-template-columns:repeat(auto-fill,minmax(160px,1fr))} }
+
+/* 批量导入面板 */
+#modal.wide{width:min(96%,680px)}
+.bi-list{max-height:44vh;overflow-y:auto;border:2px solid #E3ECF5;border-radius:12px;padding:6px;margin-top:8px;background:#fff}
+.bi-row{display:flex;align-items:center;gap:10px;padding:7px 9px;border-bottom:1px solid #F2F6FA}
+.bi-row.dup{background:#FFFBF2}
+.bi-thumb{width:44px;height:44px;border-radius:10px;background:#F5F8FB;display:flex;align-items:center;justify-content:center;font-size:1.4rem;overflow:hidden;flex-shrink:0}
+.bi-thumb img{max-width:100%;max-height:100%;object-fit:contain}
+.bi-word{flex:1;min-width:0;padding:8px 11px;border:2px solid #E3ECF5;border-radius:10px;outline:none}
+.bi-word:focus{border-color:var(--c-primary)}
+.bi-tag{font-size:.7rem;font-weight:800;padding:2px 8px;border-radius:8px;background:#F0F5FA;color:var(--c-muted);flex-shrink:0}
+.bi-tag.err{background:#FFEEEE;color:var(--c-danger)}
+.bi-cmp{display:flex;align-items:center;gap:9px;padding:7px 9px 9px 34px;border-bottom:1px solid #F2F6FA;flex-wrap:wrap}
+.bi-side{display:flex;align-items:center;gap:5px;font-size:.72rem;color:var(--c-muted)}
+.bi-side .bi-thumb{width:36px;height:36px;background:#fff;border:1px solid #eee}
+.bi-acts{display:flex;gap:6px;flex-wrap:wrap}
+.bi-act{font-size:.75rem;padding:5px 10px;border-radius:9px;background:#F0F5FA;font-weight:700}
+.bi-act.on{background:var(--c-primary);color:#fff}
+.bi-note{font-size:.72rem;color:#D68910}
 </style>
 </head>
 <body>
@@ -265,6 +284,22 @@ function compressImage(file, cb){
   reader.readAsDataURL(file);
 }
 function dataUrlExt(du){ return du.indexOf('data:image/png')===0 ? 'png' : 'jpg'; }
+
+/* 文件名 → 英文单词。与手机端 U.parseWord 逐字一致（改一处必须同步改另一处）：
+   拒绝相机/截图自动命名（含3位以上连续数字、img/dsc/photo/screenshot 等前缀） */
+function parseWord(fname){
+  let base = String(fname||'').replace(/\.[^.]+$/,'').replace(/\(\d+\)/g,' ');
+  if(/\d{3,}/.test(base)) return '';
+  let segs = (base.match(/[A-Za-z][A-Za-z '’\-]*/g)||[])
+    .map(s=>s.trim().replace(/\s+/g,' ').replace(/[\s\-'’]+$/,''))
+    .filter(s=>s.length>=2);
+  if(!segs.length) return '';
+  segs.sort((a,b)=>b.length-a.length);
+  let w = segs[0].toLowerCase();
+  if(/(^|\s)(img|dsc|dscn|dscf|photo|screenshot|screen|image|pic|untitled|newfile|received|copy|副本)(\s|$)/.test(w)) return '';
+  if(/^(wechat|wx|mmexport|signal|telegram|screenshot)/.test(w)) return '';
+  return w;
+}
 
 /* ---------- 本地草稿 ---------- */
 const DRAFT_KEY='chengzi_asset_draft_v1', PAT_KEY='chengzi_asset_pat';
@@ -455,7 +490,7 @@ const App = {
     const kw = (this._kwWords||'').toLowerCase();
     const list = Store.data.words.filter(w=>!kw || w.word.toLowerCase().includes(kw));
     let h = '<div class="toolbar"><input type="search" id="wSearch" placeholder="搜索单词…" value="'+esc(this._kwWords||'')+'">'
-      + '<button class="btn" id="wAdd">＋ 新增单词</button></div>';
+      + '<button class="btn" id="wBulk">📥 批量导入</button><button class="btn" id="wAdd">＋ 新增单词</button></div>';
     if(!list.length) h += '<div class="empty">'+(Store.data.words.length?'没有匹配的单词':'还没有单词，点右上角「＋ 新增单词」<br>或先「⬇ 从云端拉取」/「⋯」里导入手机资产包')+'</div>';
     h += '<div class="grid">'+list.map(w=>
       '<div class="card"><div class="thumb">'+imgHtml(w.img)+'</div>'
@@ -467,6 +502,7 @@ const App = {
     m.innerHTML=h;
     $('#wSearch').addEventListener('input',e=>{ this._kwWords=e.target.value; this.render(); });
     $('#wAdd').addEventListener('click',()=>Words.edit(null));
+    $('#wBulk').addEventListener('click',()=>Words.bulk());
     const a2=$('#wAdd2'); if(a2) a2.addEventListener('click',()=>Words.edit(null));
     m.querySelectorAll('[data-ed]').forEach(b=>b.addEventListener('click',()=>Words.edit(b.dataset.ed)));
     m.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>Words.del(b.dataset.del)));
@@ -515,7 +551,7 @@ const App = {
 /* ---------- 通用弹窗 ---------- */
 const Modal = {
   open(html){ $('#modal').innerHTML=html; $('#mask').classList.add('show'); },
-  close(){ $('#mask').classList.remove('show'); $('#modal').innerHTML=''; }
+  close(){ $('#mask').classList.remove('show'); $('#modal').innerHTML=''; $('#modal').classList.remove('wide'); }
 };
 $('#mask').addEventListener('click',e=>{ if(e.target.id==='mask') Modal.close(); });
 
@@ -577,6 +613,127 @@ const Words = {
     Store.data.words = Store.data.words.filter(x=>x.id!==id);
     Store.data.levels.forEach(lv=> lv.wordIds=(lv.wordIds||[]).filter(x=>x!==id));
     Store.save(); App.refreshBadges(); App.render(); toast('已删除（云端图片要等「发布」或「清理」时才会删）');
+  },
+
+  /* ---------- 批量导入：文件选择器支持框选 / Ctrl+多选，文件名自动推导单词 ---------- */
+  bulk(){
+    const inp=document.createElement('input');
+    inp.type='file'; inp.accept='image/*'; inp.multiple=true;
+    inp.addEventListener('change',()=> this.bulkHandle(inp.files));
+    inp.click();
+  },
+  async bulkHandle(files){
+    if(App.busy) return;
+    const list=Array.from(files||[]).filter(f=>!f.type || /^image\//.test(f.type));
+    if(!list.length){ toast('没有可导入的图片'); return; }
+    App.busy=true;
+    $('#progTitle').textContent='批量读取图片'; $('#prog').classList.add('show'); Publish.prog(0,'0 / '+list.length);
+    const items=[];
+    for(let i=0;i<list.length;i++){
+      const f=list[i];
+      const img = await new Promise(res=>{ try{ compressImage(f,res); }catch(e){ res(''); } });
+      items.push({ name:f.name, word:parseWord(f.name), img:img, keep:true, action:'keep', dups:[] });
+      Publish.prog((i+1)/list.length,(i+1)+' / '+list.length);
+    }
+    $('#prog').classList.remove('show');
+    App.busy=false;
+    this.bulkRefreshDups(items);
+    this.bulkPanel(items);
+  },
+  bulkRefreshDups(items){
+    items.forEach(it=>{
+      it.dups = it.word ? Store.data.words.filter(x=>x.word===it.word) : [];
+      if(!it.dups.length) it.action='keep';
+    });
+  },
+  bulkPanel(items){
+    $('#modal').classList.add('wide');
+    const rows = items.map((it,i)=>{
+      const tag = !it.word ? '<span class="bi-tag err">需填单词</span>'
+        : (it.dups.length ? '<span class="bi-tag">同名×'+it.dups.length+'</span>' : '');
+      let row = '<div class="bi-row'+(it.dups.length?' dup':'')+'">'
+        +'<input type="checkbox" data-keep="'+i+'"'+(it.keep?' checked':'')+'>'
+        +'<div class="bi-thumb">'+(it.img?'<img src="'+it.img+'">':'❓')+'</div>'
+        +'<input class="bi-word" type="text" data-word="'+i+'" value="'+esc(it.word)+'" placeholder="英文单词">'
+        + tag + '</div>';
+      // 重名对比：列出已有图 + 本次新图，三选一策略（与手机端批量导入一致）
+      if(it.keep && it.dups.length){
+        const olds = it.dups.map(w=>'<div class="bi-side"><div class="bi-thumb">'+imgHtml(w.img)+'</div><span>已有</span></div>').join('');
+        const note = it.dups.length>1 ? '<span class="bi-note">替换第1个</span>' : '';
+        const acts = [['keep','都保留'],['replace','替换旧图'],['skip','不导入这张']]
+          .map(a=>'<button class="bi-act'+(it.action===a[0]?' on':'')+'" data-act="'+a[0]+'" data-i="'+i+'">'+a[1]+'</button>').join('');
+        row += '<div class="bi-cmp">'+olds
+          +'<div class="bi-side"><div class="bi-thumb">'+imgHtml(it.img)+'</div><span>本次</span></div>'
+          +'<div class="bi-acts">'+note+acts+'</div></div>';
+      }
+      return row;
+    }).join('');
+    const lvOpts = '<option value="">仅加入单词库（不挂关卡）</option>'
+      + Store.data.levels.map(l=>'<option value="'+esc(l.id)+'">'+esc(l.name)+'（'+(l.wordIds||[]).length+' 词）</option>').join('')
+      + '<option value="__new">＋ 新建关卡…</option>';
+    const nOk = items.filter(it=>it.keep && it.word).length;
+    Modal.open(`
+      <h3>📦 批量导入 <span style="font-size:.78rem;color:var(--c-muted)">共 ${items.length} 张 · 单词自动取自文件名，可逐条修改</span></h3>
+      <div class="bi-list">${rows||'<div class="empty">（空）</div>'}</div>
+      <div class="frow" style="margin-top:12px"><label>导入到</label>
+        <select id="biLevel" style="width:100%;padding:10px 12px;border:2px solid #E3ECF5;border-radius:11px;outline:none;background:#fff">${lvOpts}</select></div>
+      <div id="biNewLv" style="display:none">
+        <div class="frow"><label>新关卡名称</label><input type="text" id="biLvName" placeholder="动物篇"></div>
+        <div class="frow"><label>关卡图标（emoji）</label><input type="text" id="biLvIcon" placeholder="🐶" maxlength="8"></div>
+      </div>
+      <div class="brow"><button class="btn" id="biCancel" style="flex:1">取消</button>
+        <button class="btn btn-primary" id="biOk" style="flex:2">确认导入 ${nOk} 个</button></div>
+      <div class="hint" style="margin-top:8px">相机/截图自动命名的图片（IMG_1234 等）无法推导单词，需手动填写。</div>`);
+    const self=this;
+    $('#modal').querySelectorAll('[data-keep]').forEach(cb=>cb.addEventListener('change',e=>{
+      items[+e.target.dataset.keep].keep=e.target.checked; self.bulkPanel(items);
+    }));
+    $('#modal').querySelectorAll('[data-word]').forEach(inp=>{
+      inp.addEventListener('input',e=>{ items[+e.target.dataset.word].word=e.target.value.trim().toLowerCase(); });
+      inp.addEventListener('change',()=>{ self.bulkRefreshDups(items); self.bulkPanel(items); });
+    });
+    $('#modal').querySelectorAll('[data-act]').forEach(btn=>btn.addEventListener('click',e=>{
+      items[+e.currentTarget.dataset.i].action=e.currentTarget.dataset.act; self.bulkPanel(items);
+    }));
+    $('#biLevel').addEventListener('change',e=>{
+      $('#biNewLv').style.display = e.target.value==='__new' ? 'block' : 'none';
+    });
+    $('#biCancel').addEventListener('click',Modal.close);
+    $('#biOk').addEventListener('click',()=> this.bulkApply(items));
+  },
+  bulkApply(items){
+    const d=Store.data;
+    // 校验：勾选的行必须有单词，且本次批量内部不重复
+    const seen={};
+    for(const it of items){
+      if(!it.keep) continue;
+      if(!it.word){ toast('有未填单词的行 —— 取消勾选或填好再导入'); return; }
+      const k=it.word.toLowerCase();
+      if(seen[k]){ toast('本次批量里单词重复：'+it.word); return; }
+      seen[k]=1;
+    }
+    // 关卡去向
+    let lv=null;
+    const lvSel=$('#biLevel').value;
+    if(lvSel==='__new'){
+      const n=$('#biLvName').value.trim();
+      if(!n){ toast('请填写新关卡名称'); return; }
+      lv={ id:uid('l'), name:n, icon:($('#biLvIcon').value.trim()||'📦'), wordIds:[], order:d.levels.length };
+      d.levels.push(lv);
+    }else if(lvSel){ lv=d.levels.find(x=>x.id===lvSel) || null; }
+    // 逐条应用（与手机端一致：替换第 1 个同名）
+    let nAdd=0,nRep=0,nKeep=0;
+    const touched=[];
+    items.forEach(it=>{
+      if(!it.keep || !it.word) return;
+      const cur = it.dups.length? it.dups[0] : null;
+      if(cur && it.action==='skip') return;
+      if(cur && it.action==='replace'){ cur.img=it.img; nRep++; touched.push(cur.id); }
+      else { const w={ id:uid('w'), word:it.word, img:it.img }; d.words.push(w); nAdd++; if(cur) nKeep++; touched.push(w.id); }
+    });
+    if(lv && touched.length) touched.forEach(id=>{ if(!lv.wordIds.includes(id)) lv.wordIds.push(id); });
+    Store.save(); App.refreshBadges(); App.render(); Modal.close();
+    toast('✅ 已导入：新增 '+nAdd+' · 替换图 '+nRep+(nKeep?(' · 同名并存 '+nKeep):'')+(lv?(' · 已挂到「'+lv.name+'」'):''));
   }
 };
 
