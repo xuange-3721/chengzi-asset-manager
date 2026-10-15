@@ -812,7 +812,9 @@ const More = {
       <h3>⚙️ 设置与数据</h3>
       <div class="frow"><label>GitHub Token（fine-grained，仅授权 chengzi-assets 的 Contents: Read and write）</label>
         <input type="password" id="mPat" placeholder="${has?'已保存（输入可覆盖）':'粘贴 token…'}" autocomplete="off">
-        <div class="hint">Token 只存在你这台电脑的浏览器里，<b>绝不写进网页源码</b>。建议 90 天过期。</div>
+        <div class="hint">Token 只存在你这台电脑的浏览器里，<b>绝不写进网页源码</b>。<br>
+          特征自检：fine-grained 以 <b>github_pat_</b> 开头（约 93 字符）；classic 以 <b>ghp_</b> 开头（40 字符）。<br>
+          报 401 = 复制不完整，或粘的不是 token 本身（GitHub 的 token 只显示一次，要用页面上的复制按钮）。</div>
       </div>
       <div class="brow" style="margin-top:0">
         <button class="btn" id="mTest">测试连接</button>
@@ -842,7 +844,10 @@ const More = {
     $('#mSavePat').addEventListener('click',()=>{
       const v=$('#mPat').value.trim();
       if(!v){ toast('先粘贴 token'); return; }
-      Store.setPat(v); App.refreshCloudBadge(); toast('Token 已保存到本机浏览器'); 
+      const looksOk = v.indexOf('github_pat_')===0 || v.indexOf('ghp_')===0;
+      if(!looksOk && !confirm('这个字符串不像 GitHub token。\n你粘的长度: '+v.length+' 字符，开头: "'+v.slice(0,8)+'"\n（正常应以 github_pat_ 或 ghp_ 开头）\n\n仍然保存吗？')) return;
+      Store.setPat(v); App.refreshCloudBadge();
+      toast('Token 已保存（长度 '+v.length+'，'+(looksOk?'格式正常':'⚠️ 格式存疑')+'）');
     });
     $('#mTest').addEventListener('click',async()=>{
       const v=$('#mPat').value.trim()||Store.pat();
