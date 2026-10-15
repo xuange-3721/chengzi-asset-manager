@@ -310,32 +310,62 @@ const GH = {
   },
   /* 读目录：返回 [{name,sha,size,path}]；不存在返回 null */
   async listDir(path){
-    const r = await this.req('/repos/'+ASSET_REPO+'/contents/'+path+'?ref='+ASSET_BRANCH,{headers:this.hdr()});
+    const r = await this.req('/repos/'+ASSET_REPO+'/contents/'+path+'?ref='+ASSET_BRANCH+'&_cb='+Date.now(),{headers:this.hdr()});
     if(!r) return null;
     const d = await r.json();
     return Array.isArray(d)? d : null;
   },
-  /* 写文件：content 为文本；自动带旧 sha 覆盖 */
-  async putText(path, text, message){
-    const old = await this.getFileSha(path);
+  /* 一次列出目录 → {文件名: sha}；目录不存在返回 {}。
+     发布前只查这一次，替代逐文件 GET：又快，又避开"刚 PUT 完立刻 GET"的缓存 404 */
+  async getDirShaMap(path){
+    const files = await this.listDir(path);
+    const map={};
+    (files||[]).forEach(f=>{ if(f.type==='file') map[f.name]=f.sha; });
+    return map;
+  },
+  /* 写文件（文本）。knownSha 可省一次 GET；若 GitHub 报 422「缺 sha」说明它那边文件已存在
+     而我们的查询撞上了缓存 404 —— 自动重取 sha 重试一次（自愈兜底）。 */
+  async putText(path, text, message, knownSha){
     const body = { message, content: utf8ToB64(text), branch: ASSET_BRANCH };
-    if(old) body.sha = old;
-    const r = await this.req('/repos/'+ASSET_REPO+'/contents/'+path,
-      { method:'PUT', headers:this.hdr({'Content-Type':'application/json'}), body: JSON.stringify(body) });
-    if(!r) throw new Error('写入失败：'+path);
-    return (await r.json()).content;
+    if(knownSha) body.sha = knownSha;
+    try{
+      const r = await this.req('/repos/'+ASSET_REPO+'/contents/'+path,
+        { method:'PUT', headers:this.hdr({'Content-Type':'application/json'}), body: JSON.stringify(body) });
+      if(!r) throw new Error('写入失败：'+path);
+      return (await r.json()).content;
+    }catch(e){
+      if(String((e&&e.message)||'').indexOf('422')<0) throw e;
+      const sha = await this.getFileSha(path);
+      if(!sha) throw e;
+      body.sha = sha;
+      const r = await this.req('/repos/'+ASSET_REPO+'/contents/'+path,
+        { method:'PUT', headers:this.hdr({'Content-Type':'application/json'}), body: JSON.stringify(body) });
+      if(!r) throw new Error('写入失败（重试后）：'+path);
+      return (await r.json()).content;
+    }
   },
-  /* 写二进制（dataURL 去 base64 前缀直接用） */
-  async putB64(path, b64, message){
-    const old = await this.getFileSha(path);
+  /* 写二进制（base64，dataURL 去前缀后的部分），重试逻辑同上 */
+  async putB64(path, b64, message, knownSha){
     const body = { message, content: b64, branch: ASSET_BRANCH };
-    if(old) body.sha = old;
-    const r = await this.req('/repos/'+ASSET_REPO+'/contents/'+path,
-      { method:'PUT', headers:this.hdr({'Content-Type':'application/json'}), body: JSON.stringify(body) });
-    if(!r) throw new Error('写入失败：'+path);
+    if(knownSha) body.sha = knownSha;
+    try{
+      const r = await this.req('/repos/'+ASSET_REPO+'/contents/'+path,
+        { method:'PUT', headers:this.hdr({'Content-Type':'application/json'}), body: JSON.stringify(body) });
+      if(!r) throw new Error('写入失败：'+path);
+    }catch(e){
+      if(String((e&&e.message)||'').indexOf('422')<0) throw e;
+      const sha = await this.getFileSha(path);
+      if(!sha) throw e;
+      body.sha = sha;
+      const r = await this.req('/repos/'+ASSET_REPO+'/contents/'+path,
+        { method:'PUT', headers:this.hdr({'Content-Type':'application/json'}), body: JSON.stringify(body) });
+      if(!r) throw new Error('写入失败（重试后）：'+path);
+    }
   },
+  /* 读单个文件的 sha。加时间戳破缓存 —— GitHub 对 contents GET 有边缘缓存，
+     刚 PUT 的文件立刻查可能返回 404 → 被误判成"新文件"而不带 sha → 422 的根因 */
   async getFileSha(path){
-    const r = await this.req('/repos/'+ASSET_REPO+'/contents/'+path+'?ref='+ASSET_BRANCH,{headers:this.hdr()});
+    const r = await this.req('/repos/'+ASSET_REPO+'/contents/'+path+'?ref='+ASSET_BRANCH+'&_cb='+Date.now(),{headers:this.hdr()});
     if(!r) return null;
     return (await r.json()).sha;
   },
@@ -695,24 +725,32 @@ const Publish = {
     try{
       // 1. 收集需要上传的图片：img 是 dataURL 的都算
       const jobs=[];
-      d.words.forEach(w=>{ if((w.img||'').startsWith('data:')) jobs.push({kind:'word',ref:w}); });
-      d.shop.items.forEach(it=>{ if((it.img||'').startsWith('data:')) jobs.push({kind:'shop',ref:it}); });
+      d.words.forEach(w=>{ if((w.img||'').startsWith('data:')) jobs.push({ref:w}); });
+      d.shop.items.forEach(it=>{ if((it.img||'').startsWith('data:')) jobs.push({ref:it}); });
       const total=jobs.length+1;
-      // 2. 逐张上传（按内容hash命名 → 内容没变文件名就没变 → 跳过）
+      // 2. 一次性列出云端图片目录的 sha 映射（替代逐文件 GET：更快，也避开缓存 404）
+      this.prog(0,'读取云端图片索引…');
+      const shas = await GH.getDirShaMap(IMG_DIR);   // {文件名: sha}
+      // 3. 逐张上传。⚠️ 全部成功后才把草稿引用换成云端路径 —— 中途失败不污染草稿，重试永远安全
+      const done=[];
       for(let i=0;i<jobs.length;i++){
         const j=jobs[i];
         const du=j.ref.img;
         const h=fnv(du);
-        const ext=dataUrlExt(du);
-        const path=IMG_DIR+'/'+j.ref.id+'.'+h+'.'+ext;
+        const name=j.ref.id+'.'+h+'.'+dataUrlExt(du);
         this.prog(i/total,'上传图片 '+(i+1)+'/'+jobs.length+' …');
-        const exist = await GH.getFileSha(path);
-        if(!exist){ await GH.putB64(path, du.split(',')[1], '图片 '+j.ref.id+' ('+h.slice(0,8)+')'); log.push('上传图片 '+j.ref.id+'.'+h.slice(0,8)+'.'+ext); }
-        else log.push('跳过（内容未变）'+j.ref.id);
-        j.ref.img='images/'+path.split('/').pop();   // 引用改为云端相对路径
-        Store.save();
+        if(shas[name]){
+          log.push('跳过（内容未变）'+name);
+        }else{
+          await GH.putB64(IMG_DIR+'/'+name, du.split(',')[1], '图片 '+name, shas[name]||null);
+          shas[name]=shas[name]||'1';   // 内存登记，同批重复引用不再查
+          log.push('上传图片 '+name);
+        }
+        done.push({ref:j.ref, rel:'images/'+name});
       }
-      // 3. 写 manifest
+      done.forEach(x=>{ x.ref.img=x.rel; });
+      Store.save();
+      // 4. 写 manifest
       this.prog(jobs.length/total,'写入 manifest.json …');
       const manifest={
         format:'chengzi-assets/1',
@@ -723,8 +761,10 @@ const Publish = {
         levels: d.levels.slice().sort((a,b)=>(a.order||0)-(b.order||0)).map((lv,i)=>({ id:lv.id, name:lv.name, icon:lv.icon||'📦', wordIds:lv.wordIds||[], order:i })),
         shop: { items: d.shop.items.map(it=>({ id:it.id, name:it.name, img:it.img, price:it.price })) }
       };
+      const manShas = await GH.getDirShaMap(ASSET_DIR);
       await GH.putText(ASSET_DIR+'/manifest.json', JSON.stringify(manifest,null,1),
-        '资产 v'+manifest.rev+'（单词'+manifest.counts.words+'/关卡'+manifest.counts.levels+'/商品'+manifest.counts.shop+'）');
+        '资产 v'+manifest.rev+'（单词'+manifest.counts.words+'/关卡'+manifest.counts.levels+'/商品'+manifest.counts.shop+'）',
+        manShas['manifest.json']||null);
       Store.data.updatedAt=manifest.updatedAt; Store.data.rev=manifest.rev; Store.save();
       this.prog(1,'完成');
       log.unshift('✅ 已发布 rev '+manifest.rev+'（单词'+manifest.counts.words+'/关卡'+manifest.counts.levels+'/商品'+manifest.counts.shop+'）');
