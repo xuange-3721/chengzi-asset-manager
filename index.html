@@ -1,1 +1,989 @@
-网站入口首页
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>橙子资产管家 · 泡泡英语</title>
+<style>
+/* ============ 基础 ============ */
+:root{
+  --c-bg:#EAF4FF; --c-card:#FFFFFF; --c-primary:#4A90E2; --c-accent:#FFB43B;
+  --c-success:#5BC588; --c-danger:#FF6B6B; --c-text:#2C3E50; --c-muted:#95A5A6;
+  --radius:16px; --shadow:0 6px 20px rgba(74,144,226,.16);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;background:var(--c-bg);
+  color:var(--c-text);min-height:100vh}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+input,select{font-family:inherit;font-size:inherit;color:inherit}
+img{max-width:100%}
+
+/* ============ 门帘 ============ */
+#gate{position:fixed;inset:0;background:linear-gradient(160deg,#B9E0FF,#EAF4FF);display:flex;
+  align-items:center;justify-content:center;z-index:999}
+#gate .box{background:var(--c-card);border-radius:24px;padding:38px 34px;box-shadow:var(--shadow);
+  width:min(90%,340px);text-align:center}
+#gate h1{font-size:1.5rem;margin-bottom:6px}
+#gate p{color:var(--c-muted);font-size:.85rem;margin-bottom:20px}
+#gate input{width:100%;padding:12px 14px;border:2px solid #E3ECF5;border-radius:12px;font-size:1rem;
+  text-align:center;letter-spacing:2px;outline:none}
+#gate input:focus{border-color:var(--c-primary)}
+#gate button{width:100%;margin-top:14px;padding:12px;border-radius:12px;background:var(--c-primary);
+  color:#fff;font-weight:700;font-size:1rem}
+#gate .err{color:var(--c-danger);font-size:.82rem;height:1.2em;margin-top:10px}
+@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)}}
+.shake{animation:shake .35s}
+
+/* ============ 主框架 ============ */
+#app{max-width:1080px;margin:0 auto;padding:16px 18px 60px}
+.topbar{display:flex;align-items:center;gap:12px;background:var(--c-card);border-radius:var(--radius);
+  padding:12px 16px;box-shadow:var(--shadow);flex-wrap:wrap}
+.topbar h1{font-size:1.15rem;flex:1;min-width:180px}
+.badge{font-size:.75rem;padding:4px 10px;border-radius:20px;background:#F0F5FA;color:var(--c-muted);font-weight:600}
+.badge.ok{background:#E6F7ED;color:var(--c-success)}
+.badge.no{background:#FFEEEE;color:var(--c-danger)}
+.btn{padding:9px 16px;border-radius:11px;font-weight:700;font-size:.9rem;background:#F0F5FA;transition:transform .12s}
+.btn:active{transform:scale(.95)}
+.btn-primary{background:var(--c-primary);color:#fff}
+.btn-success{background:var(--c-success);color:#fff}
+.btn-danger{background:#FFEEEE;color:var(--c-danger)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+
+.tabs{display:flex;gap:8px;margin:14px 0}
+.tabs button{flex:1;padding:11px;border-radius:12px;background:var(--c-card);font-weight:700;
+  box-shadow:var(--shadow);color:var(--c-muted)}
+.tabs button.on{background:var(--c-primary);color:#fff}
+.tabs button .n{opacity:.75;font-size:.85em;margin-left:4px}
+
+.toolbar{display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
+.toolbar input[type=search]{flex:1;min-width:160px;padding:9px 13px;border:2px solid #E3ECF5;
+  border-radius:11px;outline:none;background:var(--c-card)}
+.toolbar input[type=search]:focus{border-color:var(--c-primary)}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
+.card{background:var(--c-card);border-radius:var(--radius);padding:12px;box-shadow:var(--shadow);
+  display:flex;gap:11px;align-items:center;position:relative}
+.card .thumb{width:54px;height:54px;border-radius:12px;background:#F5F8FB;display:flex;align-items:center;
+  justify-content:center;font-size:1.7rem;flex-shrink:0;overflow:hidden}
+.card .thumb img{max-width:100%;max-height:100%;object-fit:contain}
+.card .info{flex:1;min-width:0}
+.card .t{font-weight:700;font-size:.98rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.card .s{font-size:.76rem;color:var(--c-muted);margin-top:3px}
+.card .ops{display:flex;flex-direction:column;gap:5px}
+.card .ops button{font-size:.75rem;padding:4px 9px;border-radius:8px;background:#F0F5FA;font-weight:700}
+.card .ops button.d{background:#FFEEEE;color:var(--c-danger)}
+.card .add{justify-content:center;min-height:84px;border:2px dashed #CFE0F0;color:var(--c-primary);
+  font-weight:700;cursor:pointer;background:rgba(255,255,255,.6)}
+
+.empty{padding:50px 20px;text-align:center;color:var(--c-muted)}
+
+/* ============ 弹窗 ============ */
+#mask{position:fixed;inset:0;background:rgba(20,40,60,.45);z-index:200;display:none;
+  align-items:center;justify-content:center;padding:18px}
+#mask.show{display:flex}
+#modal{background:var(--c-card);border-radius:20px;padding:22px;width:min(94%,460px);
+  max-height:88vh;overflow-y:auto;box-shadow:0 14px 44px rgba(0,0,0,.25)}
+#modal h3{margin-bottom:16px;font-size:1.1rem}
+.frow{margin-bottom:13px}
+.frow label{display:block;font-size:.82rem;color:var(--c-muted);font-weight:700;margin-bottom:6px}
+.frow input[type=text],.frow input[type=number],.frow input[type=password],.frow textarea{
+  width:100%;padding:10px 12px;border:2px solid #E3ECF5;border-radius:11px;outline:none}
+.frow input:focus,.frow textarea:focus{border-color:var(--c-primary)}
+.frow .hint{font-size:.75rem;color:var(--c-muted);margin-top:5px;line-height:1.55}
+.imgpick{display:flex;gap:12px;align-items:center}
+.imgpick .pv{width:74px;height:74px;border-radius:14px;background:#F5F8FB;border:2px dashed #CFE0F0;
+  display:flex;align-items:center;justify-content:center;font-size:2rem;overflow:hidden;cursor:pointer;
+  flex-shrink:0}
+.imgpick .pv img{max-width:100%;max-height:100%;object-fit:contain}
+.imgpick .pv.drag{border-color:var(--c-primary);background:#EAF4FF}
+.imgpick .col{flex:1;display:flex;flex-direction:column;gap:8px}
+.imgpick .col button{padding:8px;border-radius:10px;background:#F0F5FA;font-size:.85rem;font-weight:700}
+.brow{display:flex;gap:10px;margin-top:18px}
+.brow .btn{flex:1;padding:11px}
+
+/* 双栏选词 */
+.dual{display:flex;gap:10px}
+.dual .col{flex:1;border:2px solid #E3ECF5;border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
+.dual .col h4{font-size:.78rem;color:var(--c-muted);padding:8px 10px;background:#F7FAFD;margin:0}
+.dual .list{height:230px;overflow-y:auto}
+.dual .it{display:flex;align-items:center;gap:8px;padding:7px 10px;font-size:.86rem;cursor:pointer;
+  border-bottom:1px solid #F2F6FA}
+.dual .it:hover{background:#F0F7FF}
+.dual .it .th{width:26px;height:26px;border-radius:7px;background:#F5F8FB;display:flex;align-items:center;
+  justify-content:center;font-size:1rem;overflow:hidden;flex-shrink:0}
+.dual .it .th img{max-width:100%;max-height:100%;object-fit:contain}
+.dual .it span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ============ 进度 / 提示 ============ */
+#prog{position:fixed;inset:0;background:rgba(20,40,60,.55);z-index:300;display:none;
+  align-items:center;justify-content:center}
+#prog.show{display:flex}
+#prog .box{background:var(--c-card);border-radius:18px;padding:26px 30px;width:min(88%,360px);text-align:center}
+#prog .bar{height:10px;background:#ECEFF3;border-radius:6px;overflow:hidden;margin:14px 0 8px}
+#prog .bar i{display:block;height:100%;width:0;background:var(--c-primary);transition:width .25s}
+#prog .msg{font-size:.86rem;color:var(--c-muted)}
+#toast{position:fixed;left:50%;bottom:34px;transform:translateX(-50%) translateY(20px);z-index:400;
+  background:#2C3E50;color:#fff;padding:11px 20px;border-radius:12px;font-size:.88rem;opacity:0;
+  pointer-events:none;transition:all .25s;max-width:86%}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.log{font-size:.76rem;line-height:1.7;background:#F7FAFD;border:1px solid #EAF0F6;border-radius:11px;
+  padding:10px 12px;margin-top:10px;max-height:150px;overflow-y:auto;white-space:pre-wrap;word-break:break-all}
+.diff-list{max-height:260px;overflow-y:auto;border:2px solid #E3ECF5;border-radius:12px;padding:6px}
+.diff-list .di{display:flex;align-items:center;gap:9px;padding:6px 9px;font-size:.86rem;
+  border-bottom:1px solid #F2F6FA}
+.diff-list .di:last-child{border-bottom:none}
+.diff-list .tag{font-size:.7rem;font-weight:800;padding:2px 8px;border-radius:8px;flex-shrink:0}
+.diff-list .tag.add{background:#E6F7ED;color:var(--c-success)}
+.diff-list .tag.upd{background:#FFF4E0;color:#D68910}
+.diff-list .tag.same{background:#F0F5FA;color:var(--c-muted)}
+@media (max-width:620px){ .grid{grid-template-columns:repeat(auto-fill,minmax(160px,1fr))} }
+</style>
+</head>
+<body>
+
+<!-- 门帘：防误入。口令在源码 GATE_PASS 处修改 -->
+<div id="gate">
+  <div class="box">
+    <h1>🎈 橙子资产管家</h1>
+    <p>泡泡英语 · 电脑端资产管理</p>
+    <input type="password" id="gateInput" placeholder="请输入口令" autocomplete="off">
+    <button id="gateBtn">进 入</button>
+    <div class="err" id="gateErr"></div>
+  </div>
+</div>
+
+<div id="app" style="display:none">
+  <div class="topbar">
+    <h1>🎈 橙子资产管家</h1>
+    <span class="badge" id="cloudBadge">未连接云端</span>
+    <button class="btn" id="btnPull">⬇ 从云端拉取</button>
+    <button class="btn btn-success" id="btnPublish">⬆ 发布到云端</button>
+    <button class="btn" id="btnMore">⋯</button>
+  </div>
+
+  <div class="tabs">
+    <button data-tab="words" class="on">📝 单词<span class="n" id="nWords"></span></button>
+    <button data-tab="levels">🗂️ 关卡<span class="n" id="nLevels"></span></button>
+    <button data-tab="shop">🛒 商品<span class="n" id="nShop"></span></button>
+  </div>
+
+  <div id="main"></div>
+</div>
+
+<div id="mask"><div id="modal"></div></div>
+<div id="prog"><div class="box"><h3 id="progTitle">处理中…</h3><div class="bar"><i id="progBar"></i></div><div class="msg" id="progMsg"></div></div></div>
+<div id="toast"></div>
+
+<script>
+'use strict';
+/* =====================================================================
+ *  橙子资产管家（泡泡英语 · 电脑端资产管理器）
+ *  纯静态单文件，托管在 GitHub Pages，不含任何数据。
+ *
+ *  数据流：
+ *    本地草稿(localStorage) --发布--> chengzi-assets 仓库文件树
+ *    chengzi-assets manifest --拉取--> 本地草稿（图片异步补全为 dataURL）
+ *
+ *  ⚠️ 三条铁律（与手机端约定，改任何一条都要两端同步改）：
+ *    1. 只管「资产字段」：word/img、关卡结构、商品 name/img/price。
+ *       学习进度(proficiency等)、score、redeemLog、settings 永不写入资产包。
+ *    2. 商品 stock 以手机端为准，本工具不存也不改。
+ *    3. 图片压缩参数必须与 app 的 U.compressImage 完全一致，
+ *       且「未主动换图就绝不重压」，否则 JPEG 反复有损压缩会毁画质。
+ * =================================================================== */
+
+/* ---------- 可按需修改的配置 ---------- */
+const GATE_PASS   = 'chengzi2026';                 // 门帘口令（防误入，非安全机制）
+const ASSET_REPO  = 'xuange-3721/chengzi-assets';  // 资产数据仓库（只写文件树，禁止建 release！）
+const ASSET_BRANCH= 'main';
+const ASSET_DIR   = 'assets';                      // 仓库内根目录
+const IMG_DIR     = 'assets/images';               // 图片目录（按内容hash命名）
+const MAX_IMG     = 200;                           // 与 app 压缩一致：最长边 200px
+
+/* ---------- 门帘 ---------- */
+const gate = document.getElementById('gate');
+function tryGate(){
+  const v = document.getElementById('gateInput').value;
+  if(v === GATE_PASS){
+    try{ sessionStorage.setItem('cz_gate','1'); }catch(e){}
+    gate.style.display='none';
+    document.getElementById('app').style.display='block';
+    App.boot();
+  }else{
+    document.getElementById('gateErr').textContent='口令不对';
+    document.querySelector('#gate .box').classList.remove('shake');
+    void document.querySelector('#gate .box').offsetWidth;
+    document.querySelector('#gate .box').classList.add('shake');
+  }
+}
+document.getElementById('gateBtn').addEventListener('click',tryGate);
+document.getElementById('gateInput').addEventListener('keydown',e=>{ if(e.key==='Enter') tryGate(); });
+try{ if(sessionStorage.getItem('cz_gate')==='1'){ gate.style.display='none';
+  document.getElementById('app').style.display='block'; } }catch(e){}
+
+/* ---------- 小工具 ---------- */
+const $ = s=>document.querySelector(s);
+const esc = s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function toast(m,ms){ const t=$('#toast'); t.textContent=m; t.classList.add('show');
+  clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'), ms||2400); }
+function uid(p){ return p+'_'+Date.now()+'_'+Math.floor(Math.random()*1000); }
+/* FNV-1a 64位（拼两个32位）—— 图片内容指纹，用于文件命名与增量判断 */
+function fnv(str){
+  let h1=0x811c9dc5,h2=0x01000193^0x9dc5;
+  for(let i=0;i<str.length;i++){
+    const c=str.charCodeAt(i);
+    h1^=c;      h1=Math.imul(h1,0x01000193)>>>0;
+    h2^=(c+i)&0xffff; h2=Math.imul(h2,0x85ebca6b)>>>0;
+  }
+  return ('0000000'+h1.toString(16)).slice(-8)+('0000000'+h2.toString(16)).slice(-8);
+}
+function utf8ToB64(s){ return btoa(unescape(encodeURIComponent(s))); }
+function b64ToUtf8(s){ return decodeURIComponent(escape(atob(s.replace(/\s/g,'')))); }
+
+/* 图片压缩 —— 与 app U.compressImage 逐字一致（改一处必须同步改另一处） */
+function compressImage(file, cb){
+  const reader = new FileReader();
+  reader.onload = e=>{
+    const img = new Image();
+    img.onload = ()=>{
+      const canvas = document.createElement('canvas');
+      let w=img.width, h=img.height;
+      if(w>h){ if(w>MAX_IMG){h=h*MAX_IMG/w; w=MAX_IMG;} } else { if(h>MAX_IMG){w=w*MAX_IMG/h; h=MAX_IMG;} }
+      canvas.width=w; canvas.height=h;
+      const ctx=canvas.getContext('2d');
+      ctx.drawImage(img,0,0,w,h);
+      let out='image/jpeg';
+      try{
+        const d=ctx.getImageData(0,0,w,h).data; let hasAlpha=false;
+        for(let i=3;i<d.length;i+=4){ if(d[i]<250){ hasAlpha=true; break; } }
+        if(hasAlpha) out='image/png';
+      }catch(err){ out='image/png'; }
+      cb(canvas.toDataURL(out, 0.88));
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+function dataUrlExt(du){ return du.indexOf('data:image/png')===0 ? 'png' : 'jpg'; }
+
+/* ---------- 本地草稿 ---------- */
+const DRAFT_KEY='chengzi_asset_draft_v1', PAT_KEY='chengzi_asset_pat';
+function blankDraft(){
+  return { format:'chengzi-assets/1', updatedAt:0, rev:0,
+    words:[], levels:[], shop:{items:[]} };
+}
+const Store = {
+  data:null,
+  load(){
+    try{ const s=localStorage.getItem(DRAFT_KEY); if(s){ this.data=JSON.parse(s); return; } }catch(e){}
+    this.data=blankDraft();
+  },
+  save(){ try{ localStorage.setItem(DRAFT_KEY, JSON.stringify(this.data)); }catch(e){ toast('本地保存失败（可能空间不足）'); } },
+  pat(){ try{ return localStorage.getItem(PAT_KEY)||''; }catch(e){ return ''; } },
+  setPat(v){ try{ v? localStorage.setItem(PAT_KEY,v) : localStorage.removeItem(PAT_KEY); }catch(e){} }
+};
+
+/* ---------- GitHub API ---------- */
+const GH = {
+  base:'https://api.github.com',
+  hdr(extra){ const h={ 'Authorization':'Bearer '+Store.pat(),
+    'Accept':'application/vnd.github+json', 'User-Agent':'chengzi-asset-manager' };
+    return Object.assign(h, extra||{}); },
+
+  async req(path, opts){
+    const r = await fetch(this.base+path, opts);
+    if(r.status===401) throw new Error('Token 无效或已过期（401），请到「⋯」里重新设置');
+    if(r.status===403) throw new Error('Token 权限不足或触发限流（403）。确认 token 只勾了 chengzi-assets 的 Contents: Read and write');
+    if(r.status===404) return null;
+    if(!r.ok){
+      let d=''; try{ d=(await r.json()).message||''; }catch(e){}
+      throw new Error('GitHub API '+r.status+' '+(d||'').slice(0,120));
+    }
+    return r;
+  },
+  /* 读文件：返回 {content(原文), sha, size}；不存在返回 null */
+  async getFile(path){
+    const r = await this.req('/repos/'+ASSET_REPO+'/contents/'+path+'?ref='+ASSET_BRANCH,
+      { headers:this.hdr({'Accept':'application/vnd.github.raw'}) });
+    if(!r) return null;
+    return { content: await r.text(), sha: r.headers.get('x-git-sha')||'' , size:0 };
+  },
+  /* 读目录：返回 [{name,sha,size,path}]；不存在返回 null */
+  async listDir(path){
+    const r = await this.req('/repos/'+ASSET_REPO+'/contents/'+path+'?ref='+ASSET_BRANCH,{headers:this.hdr()});
+    if(!r) return null;
+    const d = await r.json();
+    return Array.isArray(d)? d : null;
+  },
+  /* 写文件：content 为文本；自动带旧 sha 覆盖 */
+  async putText(path, text, message){
+    const old = await this.getFileSha(path);
+    const body = { message, content: utf8ToB64(text), branch: ASSET_BRANCH };
+    if(old) body.sha = old;
+    const r = await this.req('/repos/'+ASSET_REPO+'/contents/'+path,
+      { method:'PUT', headers:this.hdr({'Content-Type':'application/json'}), body: JSON.stringify(body) });
+    if(!r) throw new Error('写入失败：'+path);
+    return (await r.json()).content;
+  },
+  /* 写二进制（dataURL 去 base64 前缀直接用） */
+  async putB64(path, b64, message){
+    const old = await this.getFileSha(path);
+    const body = { message, content: b64, branch: ASSET_BRANCH };
+    if(old) body.sha = old;
+    const r = await this.req('/repos/'+ASSET_REPO+'/contents/'+path,
+      { method:'PUT', headers:this.hdr({'Content-Type':'application/json'}), body: JSON.stringify(body) });
+    if(!r) throw new Error('写入失败：'+path);
+  },
+  async getFileSha(path){
+    const r = await this.req('/repos/'+ASSET_REPO+'/contents/'+path+'?ref='+ASSET_BRANCH,{headers:this.hdr()});
+    if(!r) return null;
+    return (await r.json()).sha;
+  },
+  async deleteFile(path, sha, message){
+    const r = await this.req('/repos/'+ASSET_REPO+'/contents/'+path,
+      { method:'DELETE', headers:this.hdr({'Content-Type':'application/json'}),
+        body: JSON.stringify({ message, sha, branch: ASSET_BRANCH }) });
+    if(!r) throw new Error('删除失败：'+path);
+  },
+  async testRepo(){
+    const r = await this.req('/repos/'+ASSET_REPO,{headers:this.hdr()});
+    if(!r) throw new Error('看不到仓库 '+ASSET_REPO+'（404）。检查仓库名，或 token 没授权这个仓库');
+    return await r.json();
+  },
+  /* 图片的 raw 下载地址（带 token 走 api 域名，可达性已验证） */
+  rawUrl(path){ return this.base+'/repos/'+ASSET_REPO+'/contents/'+path+'?ref='+ASSET_BRANCH; },
+  async downloadImage(path){
+    const r = await this.req('/repos/'+ASSET_REPO+'/contents/'+path+'?ref='+ASSET_BRANCH,
+      { headers:this.hdr({'Accept':'application/vnd.github.raw'}) });
+    if(!r) return null;
+    const blob = await r.blob();
+    return await new Promise(res=>{
+      const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=()=>res(null); fr.readAsDataURL(blob);
+    });
+  }
+};
+
+/* ---------- 渲染 img 的统一入口：dataURL / emoji / 云端路径 三态 ---------- */
+function imgHtml(v, cls){
+  if(!v) return '<span>❓</span>';
+  if(String(v).indexOf('data:')===0) return '<img src="'+v+'">';
+  if(String(v).indexOf('images/')===0){
+    const u = GH.rawUrl(ASSET_DIR+'/'+v.replace(/^images\//,''));
+    return '<img src="'+esc(u)+'" onerror="this.parentNode.textContent=\'🖼️\'">';
+  }
+  return esc(v); // emoji
+}
+
+/* =====================================================================
+ *  App
+ * =================================================================== */
+const App = {
+  tab:'words', busy:false,
+
+  boot(){
+    Store.load();
+    this.refreshBadges();
+    this.bind();
+    this.render();
+    this.refreshCloudBadge();
+    if(!Store.pat()) setTimeout(()=>{ toast('还没设置 Token，点右上角「⋯」去设置，才能发布/拉取'); }, 600);
+  },
+
+  bind(){
+    document.querySelectorAll('.tabs button').forEach(b=>{
+      b.addEventListener('click',()=>{
+        document.querySelectorAll('.tabs button').forEach(x=>x.classList.remove('on'));
+        b.classList.add('on'); this.tab=b.dataset.tab; this.render();
+      });
+    });
+    $('#btnPublish').addEventListener('click',()=>Publish.run());
+    $('#btnPull').addEventListener('click',()=>Pull.run());
+    $('#btnMore').addEventListener('click',()=>More.open());
+  },
+
+  refreshBadges(){
+    $('#nWords').textContent = Store.data.words.length||'';
+    $('#nLevels').textContent = Store.data.levels.length||'';
+    $('#nShop').textContent = Store.data.shop.items.length||'';
+  },
+
+  refreshCloudBadge(){
+    const b=$('#cloudBadge');
+    if(!Store.pat()){ b.textContent='未连接云端'; b.className='badge no'; return; }
+    b.textContent='已配置 Token'; b.className='badge ok';
+  },
+
+  render(){
+    const m=$('#main');
+    if(this.tab==='words') this.renderWords(m);
+    else if(this.tab==='levels') this.renderLevels(m);
+    else this.renderShop(m);
+  },
+
+  /* ---------- 单词 ---------- */
+  renderWords(m){
+    const kw = (this._kwWords||'').toLowerCase();
+    const list = Store.data.words.filter(w=>!kw || w.word.toLowerCase().includes(kw));
+    let h = '<div class="toolbar"><input type="search" id="wSearch" placeholder="搜索单词…" value="'+esc(this._kwWords||'')+'">'
+      + '<button class="btn" id="wAdd">＋ 新增单词</button></div>';
+    if(!list.length) h += '<div class="empty">'+(Store.data.words.length?'没有匹配的单词':'还没有单词，点右上角「＋ 新增单词」<br>或先「⬇ 从云端拉取」/「⋯」里导入手机资产包')+'</div>';
+    h += '<div class="grid">'+list.map(w=>
+      '<div class="card"><div class="thumb">'+imgHtml(w.img)+'</div>'
+      +'<div class="info"><div class="t">'+esc(w.word)+'</div><div class="s">'+esc(w.id)+'</div></div>'
+      +'<div class="ops"><button data-ed="'+esc(w.id)+'">编辑</button><button class="d" data-del="'+esc(w.id)+'">删</button></div></div>'
+    ).join('');
+    if(Store.data.words.length && !kw) h += '<div class="card add" id="wAdd2">＋ 新增单词</div>';
+    h += '</div>';
+    m.innerHTML=h;
+    $('#wSearch').addEventListener('input',e=>{ this._kwWords=e.target.value; this.render(); });
+    $('#wAdd').addEventListener('click',()=>Words.edit(null));
+    const a2=$('#wAdd2'); if(a2) a2.addEventListener('click',()=>Words.edit(null));
+    m.querySelectorAll('[data-ed]').forEach(b=>b.addEventListener('click',()=>Words.edit(b.dataset.ed)));
+    m.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>Words.del(b.dataset.del)));
+  },
+
+  /* ---------- 关卡 ---------- */
+  renderLevels(m){
+    let h = '<div class="toolbar"><span class="badge" style="font-size:.78rem">关卡按「order」排序，决定手机端关卡列表顺序</span>'
+      + '<button class="btn" id="lAdd" style="margin-left:auto">＋ 新增关卡</button></div>';
+    if(!Store.data.levels.length) h += '<div class="empty">还没有关卡</div>';
+    h += '<div class="grid">'+Store.data.levels.slice().sort((a,b)=>(a.order||0)-(b.order||0)).map(lv=>{
+      const n = (lv.wordIds||[]).length;
+      return '<div class="card"><div class="thumb" style="font-size:1.6rem">'+esc(lv.icon||'📦')+'</div>'
+        +'<div class="info"><div class="t">'+esc(lv.name)+'</div><div class="s">'+n+' 个单词 · 顺序 '+(lv.order||0)+'</div></div>'
+        +'<div class="ops"><button data-ed="'+esc(lv.id)+'">编辑</button><button class="d" data-del="'+esc(lv.id)+'">删</button></div></div>';
+    }).join('');
+    if(Store.data.levels.length) h += '<div class="card add" id="lAdd2">＋ 新增关卡</div>';
+    h += '</div>';
+    m.innerHTML=h;
+    $('#lAdd').addEventListener('click',()=>Levels.edit(null));
+    const a2=$('#lAdd2'); if(a2) a2.addEventListener('click',()=>Levels.edit(null));
+    m.querySelectorAll('[data-ed]').forEach(b=>b.addEventListener('click',()=>Levels.edit(b.dataset.ed)));
+    m.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>Levels.del(b.dataset.del)));
+  },
+
+  /* ---------- 商品 ---------- */
+  renderShop(m){
+    let h = '<div class="toolbar"><span class="badge" style="font-size:.78rem">🔒 库存(stock)以手机端为准，这里不显示也不修改</span>'
+      + '<button class="btn" id="sAdd" style="margin-left:auto">＋ 新增商品</button></div>';
+    if(!Store.data.shop.items.length) h += '<div class="empty">还没有商品</div>';
+    h += '<div class="grid">'+Store.data.shop.items.map(it=>
+      '<div class="card"><div class="thumb">'+imgHtml(it.img)+'</div>'
+      +'<div class="info"><div class="t">'+esc(it.name)+'</div><div class="s">🪙 '+esc(it.price)+' 积分</div></div>'
+      +'<div class="ops"><button data-ed="'+esc(it.id)+'">编辑</button><button class="d" data-del="'+esc(it.id)+'">删</button></div></div>'
+    ).join('');
+    if(Store.data.shop.items.length) h += '<div class="card add" id="sAdd2">＋ 新增商品</div>';
+    h += '</div>';
+    m.innerHTML=h;
+    $('#sAdd').addEventListener('click',()=>Shop.edit(null));
+    const a2=$('#sAdd2'); if(a2) a2.addEventListener('click',()=>Shop.edit(null));
+    m.querySelectorAll('[data-ed]').forEach(b=>b.addEventListener('click',()=>Shop.edit(b.dataset.id)));
+    m.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>Shop.del(b.dataset.id)));
+  }
+};
+
+/* ---------- 通用弹窗 ---------- */
+const Modal = {
+  open(html){ $('#modal').innerHTML=html; $('#mask').classList.add('show'); },
+  close(){ $('#mask').classList.remove('show'); $('#modal').innerHTML=''; }
+};
+$('#mask').addEventListener('click',e=>{ if(e.target.id==='mask') Modal.close(); });
+
+/* =====================================================================
+ *  单词
+ * =================================================================== */
+const Words = {
+  edit(id){
+    const w = id? Store.data.words.find(x=>x.id===id) : null;
+    let pendingImg = w? w.img : '';   // 本次编辑的新图（dataURL）；null 表示用户点了“移除图片”
+    Modal.open(`
+      <h3>${w?'编辑单词':'新增单词'}</h3>
+      <div class="frow"><label>英文单词 *</label>
+        <input type="text" id="fWord" value="${esc(w?w.word:'')}" placeholder="apple" autocomplete="off"></div>
+      <div class="frow"><label>图片</label>
+        <div class="imgpick">
+          <div class="pv" id="fPv">${imgHtml(w?w.img:'')}</div>
+          <div class="col">
+            <button id="fPick">📁 选择图片</button>
+            <button id="fClear">🚫 移除图片（改用 emoji）</button>
+            <input type="text" id="fEmoji" placeholder="或直接填 emoji，如 🍎" value="${esc(w && !(w.img||'').startsWith('data:') && !(w.img||'').startsWith('images/') ? w.img : '')}" style="padding:8px 11px;border:2px solid #E3ECF5;border-radius:10px;outline:none">
+          </div>
+        </div>
+        <div class="hint">图片会压缩到最长边 200px（与手机端一致）。有透明区域自动存 PNG，否则 JPEG。</div>
+        <input type="file" id="fFile" accept="image/*" style="display:none">
+      </div>
+      <div class="brow"><button class="btn" id="fCancel">取消</button>
+        <button class="btn btn-primary" id="fSave">保存</button></div>`);
+    const pv=$('#fPv');
+    const paint=()=>{ pv.innerHTML = pendingImg? imgHtml(pendingImg) : '<span>＋</span>'; };
+    paint();
+    const pickFile=f=>{ if(!f) return; compressImage(f, du=>{ pendingImg=du; $('#fEmoji').value=''; paint(); }); };
+    $('#fPick').addEventListener('click',()=>$('#fFile').click());
+    $('#fFile').addEventListener('change',e=>pickFile(e.target.files[0]));
+    pv.addEventListener('dragover',e=>{ e.preventDefault(); pv.classList.add('drag'); });
+    pv.addEventListener('dragleave',()=>pv.classList.remove('drag'));
+    pv.addEventListener('drop',e=>{ e.preventDefault(); pv.classList.remove('drag'); pickFile(e.dataTransfer.files[0]); });
+    $('#fClear').addEventListener('click',()=>{ pendingImg=''; paint(); });
+    $('#fEmoji').addEventListener('input',e=>{ if(e.target.value){ pendingImg=e.target.value.trim(); paint(); } });
+    $('#fCancel').addEventListener('click',Modal.close);
+    $('#fSave').addEventListener('click',()=>{
+      const word = $('#fWord').value.trim();
+      if(!word){ toast('单词不能为空'); return; }
+      const dup = Store.data.words.find(x=>x.word.toLowerCase()===word.toLowerCase() && (!w || x.id!==w.id));
+      if(dup){ toast('已存在同名单词：'+dup.word+'（'+dup.id+'）'); return; }
+      // emoji 与图片的优先级：本次编辑里最后操作的生效（pendingImg 已被联动维护）
+      const img = pendingImg || (w? w.img : '');
+      if(w){ w.word=word; w.img=img; }
+      else Store.data.words.push({ id:uid('w'), word, img });
+      Store.save(); App.refreshBadges(); App.render(); Modal.close(); toast('已保存到本地草稿');
+    });
+  },
+  del(id){
+    const w=Store.data.words.find(x=>x.id===id); if(!w) return;
+    const used = Store.data.levels.filter(lv=>(lv.wordIds||[]).includes(id)).map(lv=>lv.name);
+    let msg='删除单词「'+w.word+'」？';
+    if(used.length) msg+='\n\n它还在关卡里：'+used.join('、')+'（会一并移出）';
+    if(!confirm(msg)) return;
+    Store.data.words = Store.data.words.filter(x=>x.id!==id);
+    Store.data.levels.forEach(lv=> lv.wordIds=(lv.wordIds||[]).filter(x=>x!==id));
+    Store.save(); App.refreshBadges(); App.render(); toast('已删除（云端图片要等「发布」或「清理」时才会删）');
+  }
+};
+
+/* =====================================================================
+ *  关卡
+ * =================================================================== */
+const Levels = {
+  edit(id){
+    const lv = id? Store.data.levels.find(x=>x.id===id) : null;
+    const sel = new Set(lv? (lv.wordIds||[]) : []);
+    const icon = lv? (lv.icon||'📦') : '📦';
+    const name = lv? lv.name : '';
+    Modal.open(`
+      <h3>${lv?'编辑关卡':'新增关卡'}</h3>
+      <div class="frow" style="display:flex;gap:10px">
+        <div style="width:92px"><label>图标(emoji)</label><input type="text" id="lIcon" value="${esc(icon)}" maxlength="4" style="text-align:center;font-size:1.3rem"></div>
+        <div style="flex:1"><label>关卡名称 *</label><input type="text" id="lName" value="${esc(name)}" placeholder="水果"></div>
+      </div>
+      <div class="frow"><label>归属单词（点击移动）</label>
+        <div class="dual">
+          <div class="col"><h4>未归属</h4><div class="list" id="lLeft"></div></div>
+          <div class="col"><h4>已归属</h4><div class="list" id="lRight"></div></div>
+        </div>
+        <div class="hint">已归属列的顺序 = 手机端该关卡内的考核顺序（可在这里排）。</div>
+      </div>
+      <div class="brow"><button class="btn" id="lCancel">取消</button>
+        <button class="btn btn-primary" id="lSave">保存</button></div>`);
+    const paint=()=>{
+      const kw='';
+      const left = Store.data.words.filter(w=>!sel.has(w.id));
+      const right = Store.data.words.filter(w=>sel.has(w.id));
+      const row=(w,side)=>'<div class="it" data-id="'+esc(w.id)+'" data-side="'+side+'">'
+        +'<div class="th">'+imgHtml(w.img)+'</div><span>'+esc(w.word)+'</span></div>';
+      $('#lLeft').innerHTML  = left.length?  left.map(w=>row(w,'L')).join('')  : '<div class="it" style="color:#999">（空）</div>';
+      $('#lRight').innerHTML = right.length? right.map(w=>row(w,'R')).join('') : '<div class="it" style="color:#999">（空）</div>';
+      $('#lLeft').querySelectorAll('.it').forEach(it=>it.addEventListener('click',()=>{ sel.add(it.dataset.id); paint(); }));
+      $('#lRight').querySelectorAll('.it').forEach(it=>it.addEventListener('click',()=>{ sel.delete(it.dataset.id); paint(); }));
+    };
+    paint();
+    $('#lCancel').addEventListener('click',Modal.close);
+    $('#lSave').addEventListener('click',()=>{
+      const n=$('#lName').value.trim();
+      if(!n){ toast('关卡名称不能为空'); return; }
+      const ic=$('#lIcon').value.trim()||'📦';
+      const ids=[...sel];
+      if(lv){ lv.name=n; lv.icon=ic; lv.wordIds=ids; }
+      else Store.data.levels.push({ id:uid('l'), name:n, icon:ic, wordIds:ids, order:Store.data.levels.length });
+      Store.save(); App.refreshBadges(); App.render(); Modal.close(); toast('已保存到本地草稿');
+    });
+  },
+  del(id){
+    const lv=Store.data.levels.find(x=>x.id===id); if(!lv) return;
+    if(!confirm('删除关卡「'+lv.name+'」？\n（只删关卡，里面的单词不会删）')) return;
+    Store.data.levels = Store.data.levels.filter(x=>x.id!==id);
+    Store.data.levels.forEach((l,i)=>l.order=i);
+    Store.save(); App.refreshBadges(); App.render(); toast('已删除');
+  }
+};
+
+/* =====================================================================
+ *  商品
+ * =================================================================== */
+const Shop = {
+  edit(id){
+    const it = id? Store.data.shop.items.find(x=>x.id===id) : null;
+    let pendingImg = it? it.img : '';
+    Modal.open(`
+      <h3>${it?'编辑商品':'新增商品'}</h3>
+      <div class="frow"><label>商品名称 *</label>
+        <input type="text" id="sName" value="${esc(it?it.name:'')}" placeholder="小饼干"></div>
+      <div class="frow"><label>兑换价格（积分）*</label>
+        <input type="number" id="sPrice" value="${esc(it?it.price:10)}" min="1" step="1"></div>
+      <div class="frow"><label>实物图片</label>
+        <div class="imgpick">
+          <div class="pv" id="sPv">${imgHtml(it?it.img:'')}</div>
+          <div class="col">
+            <button id="sPick">📁 选择图片</button>
+            <button id="sClear">🚫 移除图片（改用 emoji）</button>
+            <input type="text" id="sEmoji" placeholder="或直接填 emoji，如 🍪" value="${esc(it && !(it.img||'').startsWith('data:') && !(it.img||'').startsWith('images/') ? it.img : '')}" style="padding:8px 11px;border:2px solid #E3ECF5;border-radius:10px;outline:none">
+          </div>
+        </div>
+        <div class="hint">🖼️ 实物拍张照片传上来，娃看到的是真实想要的奖励。</div>
+        <input type="file" id="sFile" accept="image/*" style="display:none">
+      </div>
+      <div class="frow" style="background:#FFF9EC;border-radius:12px;padding:11px 13px">
+        <div class="hint" style="margin:0">🔒 <b>库存不在本页管理</b>：库存会被娃的兑换消耗，同步时永远以手机端为准，这里改了也不会下发。</div>
+      </div>
+      <div class="brow"><button class="btn" id="sCancel">取消</button>
+        <button class="btn btn-primary" id="sSave">保存</button></div>`);
+    const pv=$('#sPv');
+    const paint=()=>{ pv.innerHTML = pendingImg? imgHtml(pendingImg) : '<span>＋</span>'; };
+    paint();
+    const pickFile=f=>{ if(!f) return; compressImage(f, du=>{ pendingImg=du; $('#sEmoji').value=''; paint(); }); };
+    $('#sPick').addEventListener('click',()=>$('#sFile').click());
+    $('#sFile').addEventListener('change',e=>pickFile(e.target.files[0]));
+    pv.addEventListener('dragover',e=>{ e.preventDefault(); pv.classList.add('drag'); });
+    pv.addEventListener('dragleave',()=>pv.classList.remove('drag'));
+    pv.addEventListener('drop',e=>{ e.preventDefault(); pv.classList.remove('drag'); pickFile(e.dataTransfer.files[0]); });
+    $('#sClear').addEventListener('click',()=>{ pendingImg=''; paint(); });
+    $('#sEmoji').addEventListener('input',e=>{ if(e.target.value){ pendingImg=e.target.value.trim(); paint(); } });
+    $('#sCancel').addEventListener('click',Modal.close);
+    $('#sSave').addEventListener('click',()=>{
+      const n=$('#sName').value.trim();
+      const p=parseInt($('#sPrice').value,10);
+      if(!n){ toast('商品名称不能为空'); return; }
+      if(!(p>0)){ toast('价格必须是正整数'); return; }
+      if(it){ it.name=n; it.img=pendingImg||it.img; it.price=p; }
+      else Store.data.shop.items.push({ id:uid('s'), name:n, img:pendingImg, price:p });
+      Store.save(); App.refreshBadges(); App.render(); Modal.close(); toast('已保存到本地草稿');
+    });
+  },
+  del(id){
+    const it=Store.data.shop.items.find(x=>x.id===id); if(!it) return;
+    if(!confirm('删除商品「'+it.name+'」？\n（兑换记录 redeemLog 不受影响，历史仍在）')) return;
+    Store.data.shop.items = Store.data.shop.items.filter(x=>x.id!==id);
+    Store.save(); App.refreshBadges(); App.render(); toast('已删除');
+  }
+};
+
+/* =====================================================================
+ *  发布到云端
+ * =================================================================== */
+const Publish = {
+  prog(p,m){ $('#progBar').style.width=Math.round(p*100)+'%'; if(m) $('#progMsg').textContent=m; },
+
+  async run(){
+    if(App.busy) return;
+    if(!Store.pat()){ toast('先到「⋯」里设置 Token'); More.open(); return; }
+    const d=Store.data;
+    if(!d.words.length && !d.levels.length && !d.shop.items.length){
+      if(!confirm('当前草稿是空的。确认要把空资产发布到云端吗？（会清空云端）')) return;
+    }
+    // 校验
+    const seen={};
+    for(const w of d.words){
+      if(!w.word){ alert('有单词名为空，请先修好'); return; }
+      const k=w.word.toLowerCase();
+      if(seen[k]){ alert('单词重复：'+w.word+'（'+seen[k]+' 与 '+w.id+'）\n请先改成不同的单词'); return; }
+      seen[k]=w.id;
+    }
+    for(const it of d.shop.items){ if(!it.name || !(it.price>0)){ alert('商品「'+(it.name||'(未命名)')+'」名称或价格不合法'); return; } }
+
+    App.busy=true;
+    $('#progTitle').textContent='发布到云端'; $('#prog').classList.add('show'); this.prog(0,'准备…');
+    const log=[];
+    try{
+      // 1. 收集需要上传的图片：img 是 dataURL 的都算
+      const jobs=[];
+      d.words.forEach(w=>{ if((w.img||'').startsWith('data:')) jobs.push({kind:'word',ref:w}); });
+      d.shop.items.forEach(it=>{ if((it.img||'').startsWith('data:')) jobs.push({kind:'shop',ref:it}); });
+      const total=jobs.length+1;
+      // 2. 逐张上传（按内容hash命名 → 内容没变文件名就没变 → 跳过）
+      for(let i=0;i<jobs.length;i++){
+        const j=jobs[i];
+        const du=j.ref.img;
+        const h=fnv(du);
+        const ext=dataUrlExt(du);
+        const path=IMG_DIR+'/'+j.ref.id+'.'+h+'.'+ext;
+        this.prog(i/total,'上传图片 '+(i+1)+'/'+jobs.length+' …');
+        const exist = await GH.getFileSha(path);
+        if(!exist){ await GH.putB64(path, du.split(',')[1], '图片 '+j.ref.id+' ('+h.slice(0,8)+')'); log.push('上传图片 '+j.ref.id+'.'+h.slice(0,8)+'.'+ext); }
+        else log.push('跳过（内容未变）'+j.ref.id);
+        j.ref.img='images/'+path.split('/').pop();   // 引用改为云端相对路径
+        Store.save();
+      }
+      // 3. 写 manifest
+      this.prog(jobs.length/total,'写入 manifest.json …');
+      const manifest={
+        format:'chengzi-assets/1',
+        updatedAt:Date.now(),
+        rev:(d.rev||0)+1,
+        counts:{ words:d.words.length, levels:d.levels.length, shop:d.shop.items.length },
+        words: d.words.map(w=>({ id:w.id, word:w.word, img:w.img })),
+        levels: d.levels.slice().sort((a,b)=>(a.order||0)-(b.order||0)).map((lv,i)=>({ id:lv.id, name:lv.name, icon:lv.icon||'📦', wordIds:lv.wordIds||[], order:i })),
+        shop: { items: d.shop.items.map(it=>({ id:it.id, name:it.name, img:it.img, price:it.price })) }
+      };
+      await GH.putText(ASSET_DIR+'/manifest.json', JSON.stringify(manifest,null,1),
+        '资产 v'+manifest.rev+'（单词'+manifest.counts.words+'/关卡'+manifest.counts.levels+'/商品'+manifest.counts.shop+'）');
+      Store.data.updatedAt=manifest.updatedAt; Store.data.rev=manifest.rev; Store.save();
+      this.prog(1,'完成');
+      log.unshift('✅ 已发布 rev '+manifest.rev+'（单词'+manifest.counts.words+'/关卡'+manifest.counts.levels+'/商品'+manifest.counts.shop+'）');
+      $('#progMsg').innerHTML='';
+      $('#progMsg').insertAdjacentHTML('beforeend','<div class="log">'+esc(log.join('\n'))+'</div>');
+      toast('✅ 已发布到云端，手机端可同步');
+      setTimeout(()=>{ $('#prog').classList.remove('show'); }, 1600);
+    }catch(e){
+      $('#prog').classList.remove('show');
+      alert('发布失败：\n'+(e.message||e));
+    }finally{
+      App.busy=false;
+    }
+  }
+};
+
+/* =====================================================================
+ *  从云端拉取
+ * =================================================================== */
+const Pull = {
+  prog(p,m){ $('#progBar').style.width=Math.round(p*100)+'%'; if(m) $('#progMsg').textContent=m; },
+  async run(){
+    if(App.busy) return;
+    if(!Store.pat()){ toast('先到「⋯」里设置 Token'); More.open(); return; }
+    App.busy=true;
+    $('#progTitle').textContent='从云端拉取'; $('#prog').classList.add('show'); this.prog(0.05,'读取 manifest …');
+    try{
+      const f = await GH.getFile(ASSET_DIR+'/manifest.json');
+      if(!f){ $('#prog').classList.remove('show'); App.busy=false;
+        if(confirm('云端还没有 manifest（第一次用）。\n要跳过拉取、直接开始新建吗？')) return;
+        return; }
+      const man = JSON.parse(f.content);
+      const local = Store.data;
+      const localRev = local.rev||0;
+      // 覆盖确认
+      if(local.words.length || local.levels.length || local.shop.items.length){
+        const newer = (man.updatedAt||0) >= (local.updatedAt||0);
+        const msg='云端 rev '+man.rev+'（'+new Date(man.updatedAt).toLocaleString()+'）\n'
+          +'本地 rev '+localRev+'（'+(local.updatedAt? new Date(local.updatedAt).toLocaleString():'尚无')+'）\n\n'
+          +'单词 '+man.counts.words+' / 关卡 '+man.counts.levels+' / 商品 '+man.counts.shop+'\n\n'
+          +(newer?'⚠️ 会覆盖当前本地草稿（建议先在「⋯」里导出备份）':'⚠️ 注意：本地看起来比云端新，确定还要拉取覆盖吗？');
+        if(!confirm(msg+'\n\n继续？')){ $('#prog').classList.remove('show'); App.busy=false; return; }
+      }
+      // 写入草稿：img 可能是云端路径（异步补全）或 emoji
+      Store.data = {
+        format:man.format||'chengzi-assets/1', updatedAt:man.updatedAt||0, rev:man.rev||0,
+        words:(man.words||[]).map(w=>({id:w.id, word:w.word, img:w.img||''})),
+        levels:(man.levels||[]).map(lv=>({id:lv.id, name:lv.name, icon:lv.icon||'📦', wordIds:lv.wordIds||[], order:lv.order||0})),
+        shop:{ items:(man.shop&&man.shop.items||[]).map(it=>({id:it.id, name:it.name, img:it.img||'', price:it.price})) }
+      };
+      Store.save(); App.refreshBadges(); App.render();
+      // 异步把云端路径图片补全为 dataURL（这样导出/离线可用）
+      const need = [];
+      Store.data.words.forEach(w=>{ if((w.img||'').startsWith('images/')) need.push(w); });
+      Store.data.shop.items.forEach(it=>{ if((it.img||'').startsWith('images/')) need.push(it); });
+      if(need.length){
+        $('#progMsg').textContent='下载图片 0/'+need.length+' …';
+        let ok=0;
+        for(let i=0;i<need.length;i++){
+          const rel=need[i].img;                       // images/xxx.jpg
+          const full=ASSET_DIR+'/'+rel.replace(/^images\//,'images/');
+          try{ const du=await GH.downloadImage(full); if(du){ need[i].img=du; ok++; } }catch(e){}
+          this.prog(0.2+0.8*(i+1)/need.length,'下载图片 '+(i+1)+'/'+need.length);
+        }
+        Store.save();
+        toast('✅ 已拉取（图片 '+ok+'/'+need.length+' 张已缓存）');
+      }else{
+        toast('✅ 已拉取 rev '+Store.data.rev);
+      }
+      this.prog(1,'完成');
+      setTimeout(()=>{ $('#prog').classList.remove('show'); }, 900);
+    }catch(e){
+      $('#prog').classList.remove('show'); alert('拉取失败：\n'+(e.message||e));
+    }finally{ App.busy=false; }
+  }
+};
+
+/* =====================================================================
+ *  更多（Token / 导出 / 导入 / 清理 / 关于）
+ * =================================================================== */
+const More = {
+  open(){
+    const has=!!Store.pat();
+    Modal.open(`
+      <h3>⚙️ 设置与数据</h3>
+      <div class="frow"><label>GitHub Token（fine-grained，仅授权 chengzi-assets 的 Contents: Read and write）</label>
+        <input type="password" id="mPat" placeholder="${has?'已保存（输入可覆盖）':'粘贴 token…'}" autocomplete="off">
+        <div class="hint">Token 只存在你这台电脑的浏览器里，<b>绝不写进网页源码</b>。建议 90 天过期。</div>
+      </div>
+      <div class="brow" style="margin-top:0">
+        <button class="btn" id="mTest">测试连接</button>
+        <button class="btn btn-primary" id="mSavePat">保存 Token</button>
+      </div>
+      <div class="frow" style="margin-top:16px"><label>数据</label>
+        <div class="brow" style="margin-top:4px">
+          <button class="btn" id="mExport">⬇ 导出资产包</button>
+          <button class="btn" id="mImport">⬆ 导入资产包</button>
+          <button class="btn btn-danger" id="mClear">清空草稿</button>
+        </div>
+        <div class="hint">导出/导入用于备份，或在没有 Token 的电脑间搬运。文件格式与手机端资产包互通。</div>
+        <input type="file" id="mFile" accept=".json,application/json" style="display:none">
+      </div>
+      <div class="frow" style="margin-top:16px"><label>云端图片清理</label>
+        <div class="brow" style="margin-top:4px"><button class="btn" id="mClean">🧹 清理未被引用的图片</button></div>
+        <div class="hint">换图后旧图会残留在仓库里，这里按 manifest 引用比对后删除（先预览再确认）。</div>
+      </div>
+      <div class="frow" style="margin-top:16px">
+        <div class="hint" style="margin:0">
+          资产仓库 <b>${esc(ASSET_REPO)}</b>（分支 ${esc(ASSET_BRANCH)}）<br>
+          当前草稿：rev ${esc(Store.data.rev||0)} · 单词 ${Store.data.words.length} / 关卡 ${Store.data.levels.length} / 商品 ${Store.data.shop.items.length}<br>
+          ⚠️ 这个仓库<b>永远不要建 Release</b>，否则会干扰游戏 OTA。
+        </div>
+      </div>
+      <div class="brow"><button class="btn" id="mClose">关闭</button></div>`);
+    $('#mSavePat').addEventListener('click',()=>{
+      const v=$('#mPat').value.trim();
+      if(!v){ toast('先粘贴 token'); return; }
+      Store.setPat(v); App.refreshCloudBadge(); toast('Token 已保存到本机浏览器'); 
+    });
+    $('#mTest').addEventListener('click',async()=>{
+      const v=$('#mPat').value.trim()||Store.pat();
+      if(!v){ toast('先粘贴 token'); return; }
+      toast('测试中…');
+      try{
+        const r=await GH.testRepo();
+        toast('✅ 连接成功：'+r.full_name+'（'+(r.permissions&&r.permissions.push?'有写权限':'无写权限！')+'）');
+      }catch(e){ alert('连接失败：\n'+(e.message||e)); }
+    });
+    $('#mExport').addEventListener('click',()=>this.exportPkg());
+    $('#mImport').addEventListener('click',()=>$('#mFile').click());
+    $('#mFile').addEventListener('change',e=>{ const f=e.target.files[0]; if(f) this.importPkg(f); });
+    $('#mClear').addEventListener('click',()=>{
+      if(!confirm('清空本地草稿？\n（云端不受影响，清空后可重新「从云端拉取」）')) return;
+      Store.data=blankDraft(); Store.save(); App.refreshBadges(); App.render(); Modal.close(); toast('已清空');
+    });
+    $('#mClean').addEventListener('click',()=>this.cleanup());
+    $('#mClose').addEventListener('click',Modal.close);
+  },
+
+  /* 导出：把云端路径的图先下载回 dataURL，产出与手机端互通的资产包 */
+  async exportPkg(){
+    const d=JSON.parse(JSON.stringify(Store.data));
+    const need=[];
+    d.words.forEach(w=>{ if((w.img||'').startsWith('images/')) need.push(w); });
+    d.shop.items.forEach(it=>{ if((it.img||'').startsWith('images/')) need.push(it); });
+    if(!Store.pat()){ toast('导出需要 Token 来下载云端图片'); return; }
+    if(need.length){ $('#progTitle').textContent='导出资产包'; $('#prog').classList.add('show'); Pull.prog(0,'下载云端图片…'); }
+    try{
+      for(let i=0;i<need.length;i++){
+        try{ const du=await GH.downloadImage(ASSET_DIR+'/'+need[i].img); if(du) need[i].img=du; }catch(e){}
+        Pull.prog((i+1)/need.length,'下载 '+(i+1)+'/'+need.length);
+      }
+      const pkg={ format:'chengzi-assets/1', exportedAt:Date.now(),
+        words:d.words.map(w=>({id:w.id,word:w.word,img:w.img})),
+        levels:d.levels.map(lv=>({id:lv.id,name:lv.name,icon:lv.icon,wordIds:lv.wordIds,order:lv.order})),
+        shop:{ items:d.shop.items.map(it=>({id:it.id,name:it.name,img:it.img,price:it.price})) } };
+      const blob=new Blob([JSON.stringify(pkg)],{type:'application/json'});
+      const a=document.createElement('a');
+      a.href=URL.createObjectURL(blob);
+      a.download='chengzi-assets-'+new Date().toISOString().slice(0,10)+'.json';
+      a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),3000);
+      toast('✅ 已导出');
+    }catch(e){ alert('导出失败：'+(e.message||e)); }
+    finally{ $('#prog').classList.remove('show'); }
+  },
+
+  /* 导入手机端资产包（或本工具导出的包） */
+  importPkg(file){
+    const fr=new FileReader();
+    fr.onload=()=>{
+      let pkg; try{ pkg=JSON.parse(fr.result); }catch(e){ alert('文件不是合法 JSON'); return; }
+      if(!pkg || !Array.isArray(pkg.words)){ alert('格式不对：缺 words 数组'); return; }
+      // diff（按 id 优先，其次按 word 文本）
+      const d=Store.data;
+      const byId={}, byWord={};
+      d.words.forEach(w=>{ byId[w.id]=w; byWord[w.word.toLowerCase()]=w; });
+      const rows=[];
+      (pkg.words||[]).forEach(nw=>{
+        const cur = byId[nw.id] || byWord[(nw.word||'').toLowerCase()];
+        rows.push({ kind:'word', cur, nw,
+          st: !cur?'add': ((cur.img!==nw.img)?'upd':'same') });
+      });
+      d.words.forEach(w=>{ if(!(pkg.words||[]).some(nw=>nw.id===w.id) && !rows.some(r=>r.cur===w)) rows.push({kind:'word',cur:w,st:'local'}); });
+      (pkg.shop&&pkg.shop.items||[]).forEach(ns=>{
+        const cur = d.shop.items.find(x=>x.id===ns.id) || d.shop.items.find(x=>x.name===ns.name);
+        rows.push({ kind:'shop', cur, nw:ns, st: !cur?'add':((cur.img!==ns.img||cur.price!==ns.price)?'upd':'same') });
+      });
+      const nAdd=rows.filter(r=>r.st==='add').length,
+            nUpd=rows.filter(r=>r.st==='upd').length,
+            nSame=rows.filter(r=>r.st==='same').length,
+            nLoc=rows.filter(r=>r.st==='local').length;
+      const tag=s=>({add:'<span class="tag add">新增</span>',upd:'<span class="tag upd">更新</span>',
+        same:'<span class="tag same">未变</span>',local:'<span class="tag same">仅本地</span>'}[s]);
+      const name=r=> r.kind==='word'? (r.nw? r.nw.word : (r.cur&&r.cur.word)) : (r.nw? r.nw.name : (r.cur&&r.cur.name));
+      Modal.open(`
+        <h3>导入资产包</h3>
+        <div class="frow">
+          <div class="hint" style="margin-bottom:10px">
+            新增 <b>${nAdd}</b> · 更新 <b>${nUpd}</b> · 未变 ${nSame} · 仅本地保留 ${nLoc}<br>
+            🔒 学习进度 / 积分 / 兑换记录 / 库存 <b>一律不会被改动</b>；「仅本地」的条目不会被删除。
+          </div>
+          <div class="diff-list">${rows.map(r=>'<div class="di">'+tag(r.st)+'<span>'+esc(name(r)||'?')+'</span>'
+            +'<span style="color:#999;font-size:.75rem;margin-left:auto">'+esc(r.kind==='word'?'单词':'商品')+'</span></div>').join('')}</div>
+        </div>
+        <div class="brow"><button class="btn" id="iCancel">取消</button>
+          <button class="btn btn-primary" id="iGo">确认导入 ${nAdd+nUpd} 项变更</button></div>`);
+      $('#iCancel').addEventListener('click',Modal.close);
+      $('#iGo').addEventListener('click',()=>{
+        rows.forEach(r=>{
+          if(r.st==='add'){
+            if(r.kind==='word') d.words.push({id:r.nw.id||uid('w'), word:r.nw.word, img:r.nw.img||''});
+            else d.shop.items.push({id:r.nw.id||uid('s'), name:r.nw.name, img:r.nw.img||'', price:r.nw.price||1});
+          }else if(r.st==='upd'){
+            if(r.kind==='word'){ r.cur.word=r.nw.word; r.cur.img=r.nw.img; }
+            else { r.cur.name=r.nw.name; r.cur.img=r.nw.img; r.cur.price=r.nw.price; }
+          }
+        });
+        if(pkg.levels && confirm('资产包里还带了关卡结构（'+pkg.levels.length+' 个）。\n替换本地的关卡列表吗？（取消 = 保留本地关卡）')){
+          d.levels = pkg.levels.map((lv,i)=>({id:lv.id||uid('l'), name:lv.name, icon:lv.icon||'📦', wordIds:lv.wordIds||[], order:lv.order!=null?lv.order:i}));
+        }
+        Store.save(); App.refreshBadges(); App.render(); Modal.close();
+        toast('✅ 已导入到本地草稿（要生效请「发布到云端」）');
+      });
+    };
+    fr.readAsText(file);
+  },
+
+  /* 清理未被 manifest 引用的云端图片 */
+  async cleanup(){
+    if(!Store.pat()){ toast('先设置 Token'); return; }
+    if(!confirm('扫描云端图片目录，列出没有被 manifest 引用的文件。\n继续？')) return;
+    $('#progTitle').textContent='清理云端图片'; $('#prog').classList.add('show'); Pull.prog(0.2,'列出云端文件…');
+    try{
+      const files = await GH.listDir(IMG_DIR);
+      const man = await GH.getFile(ASSET_DIR+'/manifest.json');
+      if(!files || !files.length){ $('#prog').classList.remove('show'); toast('云端没有图片目录'); return; }
+      const used=new Set();
+      if(man){
+        const m=JSON.parse(man.content);
+        (m.words||[]).forEach(w=>{ if((w.img||'').startsWith('images/')) used.add(w.img.split('/').pop()); });
+        ((m.shop&&m.shop.items)||[]).forEach(it=>{ if((it.img||'').startsWith('images/')) used.add(it.img.split('/').pop()); });
+      }
+      const junk = files.filter(f=>f.type==='file' && !used.has(f.name));
+      $('#prog').classList.remove('show');
+      if(!junk.length){ toast('✅ 没有可清理的图片，云端很干净'); return; }
+      if(!confirm('发现 '+junk.length+' 张未被引用的图片：\n\n'+junk.slice(0,20).map(f=>f.name).join('\n')+(junk.length>20?'\n… 等':'')+'\n\n删除它们？（不可恢复）')) return;
+      $('#prog').classList.add('show'); Pull.prog(0,'删除中…');
+      for(let i=0;i<junk.length;i++){
+        await GH.deleteFile(IMG_DIR+'/'+junk[i].name, junk[i].sha, '清理未引用图片 '+junk[i].name);
+        Pull.prog((i+1)/junk.length,'删除 '+(i+1)+'/'+junk.length);
+      }
+      toast('✅ 已清理 '+junk.length+' 张');
+    }catch(e){ $('#prog').classList.remove('show'); alert('清理失败：'+(e.message||e)); }
+    finally{ $('#prog').classList.remove('show'); }
+  }
+};
+
+/* ---------- 启动 ---------- */
+if(sessionStorage.getItem('cz_gate')==='1') App.boot();
+</script>
+</body>
+</html>
