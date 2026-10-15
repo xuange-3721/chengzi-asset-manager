@@ -723,10 +723,17 @@ const Publish = {
     $('#progTitle').textContent='发布到云端'; $('#prog').classList.add('show'); this.prog(0,'准备…');
     const log=[];
     try{
-      // 1. 收集需要上传的图片：img 是 dataURL 的都算
+      // 1. 收集需要上传的图片：img 是 dataURL 的才需要传；
+      //    已是云端路径的说明上次已传过（这就是"增量"），记一条日志让用户看得见
       const jobs=[];
-      d.words.forEach(w=>{ if((w.img||'').startsWith('data:')) jobs.push({ref:w}); });
-      d.shop.items.forEach(it=>{ if((it.img||'').startsWith('data:')) jobs.push({ref:it}); });
+      d.words.forEach(w=>{
+        if((w.img||'').startsWith('data:')) jobs.push({ref:w});
+        else if((w.img||'').startsWith('images/')) log.push('未变 '+w.word+'（云端已有）');
+      });
+      d.shop.items.forEach(it=>{
+        if((it.img||'').startsWith('data:')) jobs.push({ref:it});
+        else if((it.img||'').startsWith('images/')) log.push('未变 '+it.name+'（云端已有）');
+      });
       const total=jobs.length+1;
       // 2. 一次性列出云端图片目录的 sha 映射（替代逐文件 GET：更快，也避开缓存 404）
       this.prog(0,'读取云端图片索引…');
