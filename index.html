@@ -191,6 +191,7 @@ img{max-width:100%}
 
   <div class="tabs">
     <button data-tab="words" class="on">📝 单词<span class="n" id="nWords"></span></button>
+    <button data-tab="hanzi">🈶 汉字<span class="n" id="nHanzi"></span></button>
     <button data-tab="levels">🗂️ 关卡<span class="n" id="nLevels"></span></button>
     <button data-tab="shop">🛒 商品<span class="n" id="nShop"></span></button>
   </div>
@@ -315,7 +316,7 @@ function parseWord(fname){
 const DRAFT_KEY='chengzi_asset_draft_v1', PAT_KEY='chengzi_asset_pat';
 function blankDraft(){
   return { format:'chengzi-assets/1', updatedAt:0, rev:0,
-    words:[], levels:[], shop:{items:[]} };
+    words:[], hanzi:[], levels:[], shop:{items:[]} };
 }
 const Store = {
   data:null,
@@ -488,6 +489,7 @@ const App = {
 
   refreshBadges(){
     $('#nWords').textContent = Store.data.words.length||'';
+    $('#nHanzi').textContent = (Store.data.hanzi||[]).length||'';
     $('#nLevels').textContent = Store.data.levels.length||'';
     $('#nShop').textContent = Store.data.shop.items.length||'';
   },
@@ -501,6 +503,7 @@ const App = {
   render(){
     const m=$('#main');
     if(this.tab==='words') this.renderWords(m);
+    else if(this.tab==='hanzi') this.renderHanzi(m);
     else if(this.tab==='levels') this.renderLevels(m);
     else this.renderShop(m);
   },
@@ -528,6 +531,48 @@ const App = {
     m.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>Words.del(b.dataset.del)));
   },
 
+  /* ---------- 汉字（无图片资产，只有单字） ---------- */
+  renderHanzi(m){
+    const kw = (this._kwHanzi||'').trim();
+    if(!Array.isArray(Store.data.hanzi)) Store.data.hanzi=[];
+    const list = Store.data.hanzi.filter(h=>!kw || h.word.includes(kw));
+    let h = '<div class="toolbar"><input type="search" id="hSearch" placeholder="搜索汉字…" value="'+esc(this._kwHanzi||'')+'">'
+      + '<button class="btn btn-primary" id="hAdd" style="margin-left:auto">＋ 新增汉字</button></div>'
+      + '<div class="hint" style="margin-bottom:10px">汉字关卡用这里的字做泡泡内容；每次只能添加<b>一个</b>汉字，无图片资产。</div>'
+      + '<div class="frow" style="max-width:320px"><input type="text" id="hInput" maxlength="6" placeholder="输入一个汉字" '
+      + 'onkeydown="if(event.key===\'Enter\'){document.getElementById(\'hAdd\').click()}">'
+      + '<button class="btn" id="hAddBtn">➕ 加入</button></div>'
+      + '<div id="hErr" style="color:#d33;font-size:.8rem;min-height:1em"></div>';
+    if(!list.length) h += '<div class="empty">'+(Store.data.hanzi.length?'没有匹配的汉字':'还没有汉字，用上面的输入框添加')+'</div>';
+    h += '<div class="grid">'+list.map(hz=>
+      '<div class="card"><div class="thumb" style="font-size:2rem;font-weight:700;display:flex;align-items:center;justify-content:center;background:#fff2e0">'+esc(hz.word)+'</div>'
+      +'<div class="info"><div class="t">'+esc(hz.word)+'</div><div class="s">'+esc(hz.id)+'</div></div>'
+      +'<div class="ops"><button class="d" data-del="'+esc(hz.id)+'">删</button></div></div>'
+    ).join('')+'</div>';
+    m.innerHTML=h;
+    const add=()=>{
+      const inp=$('#hInput'), err=$('#hErr'), raw=inp.value.trim();
+      const cps=Array.from(raw);
+      if(cps.length!==1 || !/^\p{Script=Han}$/u.test(raw)){
+        err.textContent='只能添加单个汉字（当前 '+(cps.length||0)+' 个字符）'; return;
+      }
+      if(Store.data.hanzi.some(x=>x.word===raw)){ err.textContent='「'+raw+'」已在汉字库中'; return; }
+      err.textContent='';
+      Store.data.hanzi.push({id:uid('h'),word:raw,img:raw});
+      Store.save(); App.refreshBadges(); App.render(); toast('已添加「'+raw+'」');
+    };
+    $('#hAdd').addEventListener('click',add);
+    $('#hAddBtn').addEventListener('click',add);
+    $('#hSearch').addEventListener('input',e=>{ this._kwHanzi=e.target.value; this.render(); });
+    m.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>{
+      const hz=Store.data.hanzi.find(x=>x.id===b.dataset.del);
+      if(!hz || !confirm('从汉字库删除「'+hz.word+'」？（已从关卡移除，不影响熟练度）')) return;
+      Store.data.hanzi=Store.data.hanzi.filter(x=>x.id!==b.dataset.del);
+      Store.data.levels.forEach(lv=>lv.wordIds=(lv.wordIds||[]).filter(id=>id!==b.dataset.del));
+      Store.save(); App.refreshBadges(); App.render(); toast('已删除');
+    }));
+  },
+
   /* ---------- 关卡 ---------- */
   renderLevels(m){
     let h = '<div class="toolbar"><span class="badge" style="font-size:.78rem">关卡按「order」排序，决定手机端关卡列表顺序</span>'
@@ -535,8 +580,10 @@ const App = {
     if(!Store.data.levels.length) h += '<div class="empty">还没有关卡</div>';
     h += '<div class="grid">'+Store.data.levels.slice().sort((a,b)=>(a.order||0)-(b.order||0)).map(lv=>{
       const n = (lv.wordIds||[]).length;
+      const isHz = lv.type==='hanzi';
       return '<div class="card"><div class="thumb">'+imgHtml(lv.icon)+'</div>'
-        +'<div class="info"><div class="t">'+esc(lv.name)+'</div><div class="s">'+n+' 个单词 · 顺序 '+(lv.order||0)+'</div></div>'
+        +'<div class="info"><div class="t">'+esc(lv.name)+(isHz?' <span style="color:#c47a10;font-size:.75em">🈶汉字</span>':'')+'</div>'
+        +'<div class="s">'+n+(isHz?' 个汉字':' 个单词')+' · 顺序 '+(lv.order||0)+'</div></div>'
         +'<div class="ops"><button data-ed="'+esc(lv.id)+'">编辑</button><button class="d" data-del="'+esc(lv.id)+'">删</button></div></div>';
     }).join('');
     if(Store.data.levels.length) h += '<div class="card add" id="lAdd2">＋ 新增关卡</div>';
@@ -770,6 +817,7 @@ const Levels = {
   edit(id){
     const lv = id? Store.data.levels.find(x=>x.id===id) : null;
     const sel = new Set(lv? (lv.wordIds||[]) : []);
+    let curType = lv? (lv.type||'image') : 'image';  // image / hanzi
     let pendingIcon = lv? (lv.icon||'') : '';   // dataURL / emoji / ''（兜底 📦）
     const name = lv? lv.name : '';
     Modal.open(`
@@ -789,7 +837,14 @@ const Levels = {
         <input type="file" id="lFile" accept="image/*" style="display:none">
       </div>
       <div class="frow"><label>关卡名称 *</label><input type="text" id="lName" value="${esc(name)}" placeholder="水果"></div>
-      <div class="frow"><label>归属单词（点击移动）</label>
+      <div class="frow"><label>关卡类型</label>
+        <div style="display:flex;gap:8px">
+          <button type="button" class="btn ltype ${(!lv||lv.type!=='hanzi')?'btn-primary':''}" data-t="image">🖼️ 普通（图片 / emoji）</button>
+          <button type="button" class="btn ltype ${(lv&&lv.type==='hanzi')?'btn-primary':''}" data-t="hanzi">🈶 汉字关卡</button>
+        </div>
+        <div class="hint">切换类型会清空已归属内容（两边词库不同）。</div>
+      </div>
+      <div class="frow"><label id="lPoolLabel">归属内容（点击移动）</label>
         <div class="dual">
           <div class="col"><h4>未归属</h4><div class="list" id="lLeft"></div></div>
           <div class="col"><h4>已归属</h4><div class="list" id="lRight"></div></div>
@@ -809,9 +864,20 @@ const Levels = {
     pv.addEventListener('drop',e=>{ e.preventDefault(); pv.classList.remove('drag'); pickFile(e.dataTransfer.files[0]); });
     $('#lClear').addEventListener('click',()=>{ pendingIcon=''; $('#lIcon').value=''; paint(); });
     $('#lIcon').addEventListener('input',e=>{ if(e.target.value){ pendingIcon=e.target.value.trim(); paint(); } });
+    // 类型切换：两边词库不同 → 清空已归属，避免汉字/单词 id 混挂
+    document.querySelectorAll('.ltype').forEach(b=>b.addEventListener('click',()=>{
+      if(curType===b.dataset.t) return;
+      curType=b.dataset.t;
+      sel.clear();
+      document.querySelectorAll('.ltype').forEach(x=>x.classList.toggle('btn-primary',x.dataset.t===curType));
+      $('#lPoolLabel').textContent = curType==='hanzi'?'归属汉字（点击移动）':'归属单词（点击移动）';
+      paintWords();
+    }));
+    $('#lPoolLabel').textContent = curType==='hanzi'?'归属汉字（点击移动）':'归属单词（点击移动）';
     const paintWords=()=>{
-      const left = Store.data.words.filter(w=>!sel.has(w.id));
-      const right = Store.data.words.filter(w=>sel.has(w.id));
+      const pool = curType==='hanzi' ? (Store.data.hanzi||[]) : Store.data.words;
+      const left = pool.filter(w=>!sel.has(w.id));
+      const right = pool.filter(w=>sel.has(w.id));
       const row=(w,side)=>'<div class="it" data-id="'+esc(w.id)+'" data-side="'+side+'">'
         +'<div class="th">'+imgHtml(w.img)+'</div><span>'+esc(w.word)+'</span></div>';
       $('#lLeft').innerHTML  = left.length?  left.map(w=>row(w,'L')).join('')  : '<div class="it" style="color:#999">（空）</div>';
@@ -826,8 +892,8 @@ const Levels = {
       if(!n){ toast('关卡名称不能为空'); return; }
       const ic = pendingIcon || '📦';
       const ids=[...sel];
-      if(lv){ lv.name=n; lv.icon=ic; lv.wordIds=ids; }
-      else Store.data.levels.push({ id:uid('l'), name:n, icon:ic, wordIds:ids, order:Store.data.levels.length });
+      if(lv){ lv.name=n; lv.icon=ic; lv.type=curType; lv.wordIds=ids; }
+      else Store.data.levels.push({ id:uid('l'), name:n, icon:ic, type:curType, wordIds:ids, order:Store.data.levels.length });
       Store.save(); App.refreshBadges(); App.render(); Modal.close(); toast('已保存到本地草稿');
     });
   },
@@ -971,18 +1037,19 @@ const Publish = {
         format:'chengzi-assets/1',
         updatedAt:Date.now(),
         rev:(d.rev||0)+1,
-        counts:{ words:d.words.length, levels:d.levels.length, shop:d.shop.items.length },
+        counts:{ words:d.words.length, hanzi:(d.hanzi||[]).length, levels:d.levels.length, shop:d.shop.items.length },
         words: d.words.map(w=>({ id:w.id, word:w.word, img:w.img })),
-        levels: d.levels.slice().sort((a,b)=>(a.order||0)-(b.order||0)).map((lv,i)=>({ id:lv.id, name:lv.name, icon:lv.icon||'📦', wordIds:lv.wordIds||[], order:i })),
+        hanzi: (d.hanzi||[]).map(h=>({ id:h.id, word:h.word })),   // 汉字无图片资产
+        levels: d.levels.slice().sort((a,b)=>(a.order||0)-(b.order||0)).map((lv,i)=>({ id:lv.id, name:lv.name, icon:lv.icon||'📦', type:lv.type||'image', wordIds:lv.wordIds||[], order:i })),
         shop: { items: d.shop.items.map(it=>({ id:it.id, name:it.name, img:it.img, price:it.price })) }
       };
       const manShas = await GH.getDirShaMap(ASSET_DIR);
       await GH.putText(ASSET_DIR+'/manifest.json', JSON.stringify(manifest,null,1),
-        '资产 v'+manifest.rev+'（单词'+manifest.counts.words+'/关卡'+manifest.counts.levels+'/商品'+manifest.counts.shop+'）',
+        '资产 v'+manifest.rev+'（单词'+manifest.counts.words+'/汉字'+manifest.counts.hanzi+'/关卡'+manifest.counts.levels+'/商品'+manifest.counts.shop+'）',
         manShas['manifest.json']||null);
       Store.data.updatedAt=manifest.updatedAt; Store.data.rev=manifest.rev; Store.save();
       this.prog(1,'完成');
-      log.unshift('✅ 已发布 rev '+manifest.rev+'（单词'+manifest.counts.words+'/关卡'+manifest.counts.levels+'/商品'+manifest.counts.shop+'）');
+      log.unshift('✅ 已发布 rev '+manifest.rev+'（单词'+manifest.counts.words+'/汉字'+manifest.counts.hanzi+'/关卡'+manifest.counts.levels+'/商品'+manifest.counts.shop+'）');
       $('#progMsg').innerHTML='';
       $('#progMsg').insertAdjacentHTML('beforeend','<div class="log">'+esc(log.join('\n'))+'</div>');
       toast('✅ 已发布到云端，手机端可同步');
@@ -1015,11 +1082,11 @@ const Pull = {
       const local = Store.data;
       const localRev = local.rev||0;
       // 覆盖确认
-      if(local.words.length || local.levels.length || local.shop.items.length){
+      if(local.words.length || (local.hanzi||[]).length || local.levels.length || local.shop.items.length){
         const newer = (man.updatedAt||0) >= (local.updatedAt||0);
         const msg='云端 rev '+man.rev+'（'+new Date(man.updatedAt).toLocaleString()+'）\n'
           +'本地 rev '+localRev+'（'+(local.updatedAt? new Date(local.updatedAt).toLocaleString():'尚无')+'）\n\n'
-          +'单词 '+man.counts.words+' / 关卡 '+man.counts.levels+' / 商品 '+man.counts.shop+'\n\n'
+          +'单词 '+man.counts.words+' / 汉字 '+((man.counts&&man.counts.hanzi)||0)+' / 关卡 '+man.counts.levels+' / 商品 '+man.counts.shop+'\n\n'
           +(newer?'⚠️ 会覆盖当前本地草稿（建议先在「⋯」里导出备份）':'⚠️ 注意：本地看起来比云端新，确定还要拉取覆盖吗？');
         if(!confirm(msg+'\n\n继续？')){ $('#prog').classList.remove('show'); App.busy=false; return; }
       }
@@ -1027,7 +1094,8 @@ const Pull = {
       Store.data = {
         format:man.format||'chengzi-assets/1', updatedAt:man.updatedAt||0, rev:man.rev||0,
         words:(man.words||[]).map(w=>({id:w.id, word:w.word, img:w.img||''})),
-        levels:(man.levels||[]).map(lv=>({id:lv.id, name:lv.name, icon:lv.icon||'📦', wordIds:lv.wordIds||[], order:lv.order||0})),
+        hanzi:(man.hanzi||[]).map(h=>({id:h.id, word:h.word, img:h.word||''})),
+        levels:(man.levels||[]).map(lv=>({id:lv.id, name:lv.name, icon:lv.icon||'📦', type:lv.type||'image', wordIds:lv.wordIds||[], order:lv.order||0})),
         shop:{ items:(man.shop&&man.shop.items||[]).map(it=>({id:it.id, name:it.name, img:it.img||'', price:it.price})) }
       };
       Store.save(); App.refreshBadges(); App.render();
@@ -1139,7 +1207,8 @@ const More = {
       }
       const pkg={ format:'chengzi-assets/1', exportedAt:Date.now(),
         words:d.words.map(w=>({id:w.id,word:w.word,img:w.img})),
-        levels:d.levels.map(lv=>({id:lv.id,name:lv.name,icon:lv.icon,wordIds:lv.wordIds,order:lv.order})),
+        hanzi:(d.hanzi||[]).map(h=>({id:h.id,word:h.word,img:h.word||''})),
+        levels:d.levels.map(lv=>({id:lv.id,name:lv.name,icon:lv.icon,type:lv.type||'image',wordIds:lv.wordIds,order:lv.order})),
         shop:{ items:d.shop.items.map(it=>({id:it.id,name:it.name,img:it.img,price:it.price})) } };
       const blob=new Blob([JSON.stringify(pkg)],{type:'application/json'});
       const a=document.createElement('a');
@@ -1168,6 +1237,14 @@ const More = {
           st: !cur?'add': ((cur.img!==nw.img)?'upd':'same') });
       });
       d.words.forEach(w=>{ if(!(pkg.words||[]).some(nw=>nw.id===w.id) && !rows.some(r=>r.cur===w)) rows.push({kind:'word',cur:w,st:'local'}); });
+      // 汉字
+      if(!Array.isArray(d.hanzi)) d.hanzi=[];
+      const hById={}, hByWord={};
+      d.hanzi.forEach(h=>{ hById[h.id]=h; hByWord[h.word]=h; });
+      (pkg.hanzi||[]).forEach(nh=>{
+        const cur = hById[nh.id] || hByWord[nh.word];
+        rows.push({ kind:'hanzi', cur, nw:nh, st: !cur?'add':((cur.word!==nh.word)?'upd':'same') });
+      });
       (pkg.shop&&pkg.shop.items||[]).forEach(ns=>{
         const cur = d.shop.items.find(x=>x.id===ns.id) || d.shop.items.find(x=>x.name===ns.name);
         rows.push({ kind:'shop', cur, nw:ns, st: !cur?'add':((cur.img!==ns.img||cur.price!==ns.price)?'upd':'same') });
@@ -1178,7 +1255,10 @@ const More = {
             nLoc=rows.filter(r=>r.st==='local').length;
       const tag=s=>({add:'<span class="tag add">新增</span>',upd:'<span class="tag upd">更新</span>',
         same:'<span class="tag same">未变</span>',local:'<span class="tag same">仅本地</span>'}[s]);
-      const name=r=> r.kind==='word'? (r.nw? r.nw.word : (r.cur&&r.cur.word)) : (r.nw? r.nw.name : (r.cur&&r.cur.name));
+      const name=r=> (r.kind==='word'||r.kind==='hanzi')
+        ? (r.nw? r.nw.word : (r.cur&&r.cur.word))
+        : (r.nw? r.nw.name : (r.cur&&r.cur.name));
+      const kindName={word:'单词',hanzi:'汉字',shop:'商品'};
       Modal.open(`
         <h3>导入资产包</h3>
         <div class="frow">
@@ -1187,7 +1267,7 @@ const More = {
             🔒 学习进度 / 积分 / 兑换记录 / 库存 <b>一律不会被改动</b>；「仅本地」的条目不会被删除。
           </div>
           <div class="diff-list">${rows.map(r=>'<div class="di">'+tag(r.st)+'<span>'+esc(name(r)||'?')+'</span>'
-            +'<span style="color:#999;font-size:.75rem;margin-left:auto">'+esc(r.kind==='word'?'单词':'商品')+'</span></div>').join('')}</div>
+            +'<span style="color:#999;font-size:.75rem;margin-left:auto">'+esc(kindName[r.kind]||'')+'</span></div>').join('')}</div>
         </div>
         <div class="brow"><button class="btn" id="iCancel">取消</button>
           <button class="btn btn-primary" id="iGo">确认导入 ${nAdd+nUpd} 项变更</button></div>`);
@@ -1196,14 +1276,16 @@ const More = {
         rows.forEach(r=>{
           if(r.st==='add'){
             if(r.kind==='word') d.words.push({id:r.nw.id||uid('w'), word:r.nw.word, img:r.nw.img||''});
+            else if(r.kind==='hanzi') d.hanzi.push({id:r.nw.id||uid('h'), word:r.nw.word, img:r.nw.word||''});
             else d.shop.items.push({id:r.nw.id||uid('s'), name:r.nw.name, img:r.nw.img||'', price:r.nw.price||1});
           }else if(r.st==='upd'){
             if(r.kind==='word'){ r.cur.word=r.nw.word; r.cur.img=r.nw.img; }
+            else if(r.kind==='hanzi'){ r.cur.word=r.nw.word; r.cur.img=r.nw.word; }
             else { r.cur.name=r.nw.name; r.cur.img=r.nw.img; r.cur.price=r.nw.price; }
           }
         });
         if(pkg.levels && confirm('资产包里还带了关卡结构（'+pkg.levels.length+' 个）。\n替换本地的关卡列表吗？（取消 = 保留本地关卡）')){
-          d.levels = pkg.levels.map((lv,i)=>({id:lv.id||uid('l'), name:lv.name, icon:lv.icon||'📦', wordIds:lv.wordIds||[], order:lv.order!=null?lv.order:i}));
+          d.levels = pkg.levels.map((lv,i)=>({id:lv.id||uid('l'), name:lv.name, icon:lv.icon||'📦', type:lv.type||'image', wordIds:lv.wordIds||[], order:lv.order!=null?lv.order:i}));
         }
         Store.save(); App.refreshBadges(); App.render(); Modal.close();
         toast('✅ 已导入到本地草稿（要生效请「发布到云端」）');
